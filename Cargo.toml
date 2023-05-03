@@ -21,7 +21,9 @@ async-graphql-axum = "5.0.5"
 tower-http = { version = "0.4.0", features = ["cors"] }
 axum-auth = "0.4"
 log = "0.4.17"
-reqwest = "0.11.17"
+reqwest = { version = "0.11.17", features = [
+    "rustls-tls",
+], default-features = false }
 http-cache = "0.11.0"
 http-cache-reqwest = "0.9.0"
 once_cell = "1.17.1"
