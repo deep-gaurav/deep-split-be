@@ -6,7 +6,7 @@ After=network.target
 User=deep
 WorkingDirectory=/home/deep/deepsplit
 Environment="PORT=9342"
-ExecStart=/home/deep/deep/deepsplit/deepsplit_be
+ExecStart=/home/deep/deepsplit/deepsplit_be
 Restart=always
 
 [Install]
