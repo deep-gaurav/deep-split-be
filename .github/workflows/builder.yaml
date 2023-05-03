@@ -311,7 +311,8 @@ jobs:
       - name: envset
         run: |
           (echo 'SUBJECT=Deepsplit development build';
-           echo 'PRERELEASE=--prerelease') >> $GITHUB_ENV
+           echo 'PRERELEASE=--prerelease';
+           echo 'TAG_NAME=nightly') >> $GITHUB_ENV
           gh release delete nightly --yes || true
           git push origin :nightly || true
 
@@ -320,4 +321,4 @@ jobs:
         env:
           DEBUG: api
         run: |
-          gh release create $TAG_NAME $PRERELEASE --title "$TAG_NAME" --target $GITHUB_SHA deepsplit_be/*
+          gh release create $TAG_NAME $PRERELEASE --title "$TAG_NAME" --target $GITHUB_SHA deepsplit_be*
