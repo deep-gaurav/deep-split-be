@@ -91,7 +91,7 @@ impl Mutation {
         context: &Context<'ctx>,
         group_id: String,
         title: String,
-        amount: f64,
+        amount: i64,
         splits: Vec<SplitInput>,
     ) -> anyhow::Result<Expense> {
         let auth_type = context

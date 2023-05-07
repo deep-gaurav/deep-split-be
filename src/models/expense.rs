@@ -104,7 +104,7 @@ impl Expense {
         user_id: &str,
         title: &str,
         group_id: &str,
-        amount: f64,
+        amount: i64,
         splits: Vec<SplitInput>,
         pool: &SqlitePool,
     ) -> anyhow::Result<Expense> {
