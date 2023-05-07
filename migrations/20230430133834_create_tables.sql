@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS expenses (
 
   group_id TEXT NOT NULL,
 
-  amount REAL NOT NULL, 
+  amount INTEGER NOT NULL, 
 
   CONSTRAINT fk_user
     FOREIGN KEY(created_by) 
@@ -56,10 +56,10 @@ CREATE TABLE IF NOT EXISTS expenses (
 CREATE TABLE IF NOT EXISTS split_transactions (
   id TEXT PRIMARY KEY NOT NULL,
   expense_id TEXT NOT NULL,
-  amount REAL NOT NULL,
+  amount INTEGER NOT NULL,
   from_user TEXT NOT NULL,
   to_user TEXT NOT NULL,
-  amount_settled REAL NOT NULL,
+  amount_settled INTEGER NOT NULL,
 
   CONSTRAINT fk_from_user
     FOREIGN KEY(from_user) 

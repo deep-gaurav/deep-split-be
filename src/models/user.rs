@@ -91,7 +91,7 @@ impl User {
         let groups = self.get_groups(pool).await?;
         Ok(groups)
     }
-    pub async fn to_pay<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<f64> {
+    pub async fn to_pay<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
         let user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
@@ -128,7 +128,7 @@ impl User {
         }
     }
 
-    pub async fn to_receive<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<f64> {
+    pub async fn to_receive<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
         let user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?

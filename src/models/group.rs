@@ -44,7 +44,7 @@ impl Group {
         self.get_expenses(skip, limit, pool).await
     }
 
-    pub async fn to_pay<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<f64> {
+    pub async fn to_pay<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
         let user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
@@ -71,7 +71,7 @@ impl Group {
         Ok(to_pay)
     }
 
-    pub async fn to_receive<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<f64> {
+    pub async fn to_receive<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
         let user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?

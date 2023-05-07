@@ -17,7 +17,7 @@ pub struct Expense {
 
     pub group_id: String,
 
-    pub amount: f64,
+    pub amount: i64,
 }
 
 #[Object]
@@ -44,7 +44,7 @@ impl Expense {
         Group::get_from_id(&self.group_id, pool).await
     }
 
-    pub async fn amount(&self) -> f64 {
+    pub async fn amount(&self) -> i64 {
         self.amount
     }
 
@@ -54,7 +54,7 @@ impl Expense {
         self.get_splits(pool).await
     }
 
-    pub async fn to_pay<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<f64> {
+    pub async fn to_pay<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
         let user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
@@ -76,7 +76,7 @@ impl Expense {
         Ok(to_pay)
     }
 
-    pub async fn to_receive<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<f64> {
+    pub async fn to_receive<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
         let user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?

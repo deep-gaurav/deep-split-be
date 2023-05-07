@@ -7,10 +7,10 @@ use super::{expense::Expense, user::User};
 pub struct Split {
     pub id: String,
     pub expense_id: String,
-    pub amount: f64,
+    pub amount: i64,
     pub from_user: String,
     pub to_user: String,
-    pub amount_settled: f64,
+    pub amount_settled: i64,
 }
 
 #[Object]
@@ -24,11 +24,11 @@ impl Split {
         Expense::get_from_id(&self.expense_id, pool).await
     }
 
-    pub async fn amount(&self) -> f64 {
+    pub async fn amount(&self) -> i64 {
         self.amount
     }
 
-    pub async fn amount_settled(&self) -> f64 {
+    pub async fn amount_settled(&self) -> i64 {
         self.amount_settled
     }
 
