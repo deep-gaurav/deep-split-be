@@ -116,6 +116,6 @@ impl Mutation {
 
 #[derive(InputObject)]
 pub struct SplitInput {
-    pub amount: f64,
+    pub amount: i64,
     pub user_id: String,
 }
