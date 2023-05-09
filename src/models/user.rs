@@ -152,10 +152,10 @@ impl User {
             let to_pay = sqlx::query!(
                 "
                 SELECT SUM(amount-amount_settled) as to_pay FROM split_transactions
-                WHERE to_user = $1 AND to_user = $2
+                WHERE to_user = $1 AND from_user = $2
             ",
+                user.id,
                 self.id,
-                user.id
             )
             .fetch_one(pool)
             .await?
