@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS split_transactions (
 
 CREATE TABLE IF NOT EXISTS payment_modes (
   id TEXT PRIMARY KEY NOT NULL,
-  mode TEXT UNIQUE NOT NULL,
+  mode TEXT NOT NULL,
   user_id TEXT NOT NULL,
   value TEXT NOT NULL,
 

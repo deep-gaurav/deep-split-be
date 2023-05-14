@@ -50,6 +50,7 @@ impl User {
         .await?;
         if let Some(upi_id) = upi_id {
             let id = uuid::Uuid::new_v4().to_string();
+            log::debug!("id={id} user_id: {} upi_id: {upi_id}", user.id);
             let upi_id = sqlx::query!(
                 "INSERT INTO payment_modes(id,mode,user_id,value) VALUES ($1,$2,$3,$4)",
                 id,
@@ -58,7 +59,11 @@ impl User {
                 upi_id
             )
             .execute(&mut transaction)
-            .await?;
+            .await
+            .map_err(|e| {
+                log::warn!("Error {:#?}", e);
+                e
+            })?;
             if upi_id.rows_affected() != 1 {
                 return Err(anyhow::anyhow!("Cannot add payment method"));
             }
