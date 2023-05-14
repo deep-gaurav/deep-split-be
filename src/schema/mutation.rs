@@ -1,3 +1,5 @@
+use std::{todo, unimplemented};
+
 use anyhow::Ok;
 use async_graphql::{Context, InputObject, Object};
 
@@ -16,6 +18,7 @@ impl Mutation {
         &self,
         context: &Context<'ctx>,
         name: String,
+        upi_id: Option<String>,
     ) -> anyhow::Result<User> {
         let auth_type = context
             .data::<AuthTypes>()
@@ -25,7 +28,7 @@ impl Mutation {
             AuthTypes::AuthorizedNotSignedUp(phone) => {
                 let pool = get_pool_from_context(context).await?;
                 let id = uuid::Uuid::new_v4().to_string();
-                let user = User::new_user(&id, &name, phone, pool)
+                let user = User::new_user(&id, &name, phone, upi_id, pool)
                     .await
                     .map_err(|_e| anyhow::anyhow!("Can't create user"))?;
                 Ok(user)
@@ -111,6 +114,42 @@ impl Mutation {
                 Ok(expense)
             }
         }
+    }
+
+    pub async fn settle_expense<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        expense_id: String,
+        amount: i64,
+    ) -> anyhow::Result<Expense> {
+        let _user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+
+        Expense::settle_expense(&expense_id, &_user.id, amount, pool).await?;
+        let expense = Expense::get_from_id(&expense_id, pool).await?;
+
+        Ok(expense)
+    }
+
+    pub async fn settle_user<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        user_id: String,
+        amount: i64,
+    ) -> anyhow::Result<&str> {
+        let _user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+
+        _user.settle_expense(&user_id, amount, pool).await?;
+        Ok("success")
     }
 }
 

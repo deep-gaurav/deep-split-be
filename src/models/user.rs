@@ -29,12 +29,16 @@ impl User {
         Ok(user)
     }
 
+    // pub async
+
     pub async fn new_user(
         id: &str,
         name: &str,
         phone: &str,
+        upi_id: Option<String>,
         pool: &SqlitePool,
     ) -> anyhow::Result<User> {
+        let mut transaction = pool.begin().await?;
         let user = sqlx::query_as!(
             User,
             r#"INSERT INTO users(id,name,phone) VALUES ($1,$2,$3) RETURNING id as "id!", name as "name!", phone as "phone!", notification_token"#,
@@ -42,8 +46,24 @@ impl User {
             name,
             phone
         )
-        .fetch_one(pool)
+        .fetch_one(&mut transaction)
         .await?;
+        if let Some(upi_id) = upi_id {
+            let id = uuid::Uuid::new_v4().to_string();
+            let upi_id = sqlx::query!(
+                "INSERT INTO payment_modes(id,mode,user_id,value) VALUES ($1,$2,$3,$4)",
+                id,
+                "UPI",
+                user.id,
+                upi_id
+            )
+            .execute(&mut transaction)
+            .await?;
+            if upi_id.rows_affected() != 1 {
+                return Err(anyhow::anyhow!("Cannot add payment method"));
+            }
+        }
+        transaction.commit().await?;
         Ok(user)
     }
 
@@ -61,6 +81,48 @@ impl User {
         .await?;
         Ok(groups)
     }
+
+    pub async fn settle_expense(
+        &self,
+        to_user: &str,
+        amount: i64,
+        pool: &SqlitePool,
+    ) -> anyhow::Result<()> {
+        let mut transaction = pool.begin().await?;
+
+        let splits = sqlx::query!(
+            "SELECT * FROM split_transactions WHERE from_user=$1 AND to_user=$2",
+            self.id,
+            to_user
+        )
+        .fetch_all(&mut transaction)
+        .await?;
+
+        let mut amount_remaining = amount;
+        for split in splits {
+            if amount_remaining <= 0 {
+                break;
+            }
+            if split.amount - amount_remaining > 0 {
+                let setlleable = amount_remaining.min(split.amount - split.amount_settled);
+                let new_val = split.amount_settled + setlleable;
+                sqlx::query!(
+                    "UPDATE split_transactions SET amount_settled=$1 WHERE id=$2",
+                    new_val,
+                    split.id
+                )
+                .execute(&mut transaction)
+                .await?;
+                amount_remaining -= setlleable;
+            }
+        }
+        if amount_remaining > 0 {
+            return Err(anyhow::anyhow!("Cant settle more than owed"));
+        }
+        transaction.commit().await?;
+
+        Ok(())
+    }
 }
 
 #[Object]
@@ -77,20 +139,6 @@ impl User {
         &self.phone
     }
 
-    pub async fn groups<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<Group>> {
-        let auth = context
-            .data::<AuthTypes>()
-            .map_err(|e| anyhow::anyhow!("Not logged in"))?
-            .as_authorized_user()
-            .ok_or(anyhow::anyhow!("Not logged in"))?;
-        if auth.id != self.id {
-            return Err(anyhow::anyhow!("Unauthorized"));
-        }
-
-        let pool = get_pool_from_context(context).await?;
-        let groups = self.get_groups(pool).await?;
-        Ok(groups)
-    }
     pub async fn to_pay<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
         let user = context
             .data::<AuthTypes>()
@@ -126,6 +174,26 @@ impl User {
             .unwrap_or_default();
             Ok(to_pay)
         }
+    }
+
+    pub async fn upi_ids<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<String>> {
+        let _user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+
+        let id = sqlx::query!(
+            r#"SELECT * from payment_modes WHERE user_id = $1 AND mode='UPI'"#,
+            self.id
+        )
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(|rec| rec.value)
+        .collect();
+        Ok(id)
     }
 
     pub async fn to_receive<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {

@@ -72,4 +72,15 @@ CREATE TABLE IF NOT EXISTS split_transactions (
   CONSTRAINT fk_expense
     FOREIGN KEY(expense_id) 
 	  REFERENCES expenses(id)
-)
+);
+
+CREATE TABLE IF NOT EXISTS payment_modes (
+  id TEXT PRIMARY KEY NOT NULL,
+  mode TEXT UNIQUE NOT NULL,
+  user_id TEXT NOT NULL,
+  value TEXT NOT NULL,
+
+  CONSTRAINT fk_user
+    FOREIGN KEY(user_id) 
+	  REFERENCES users(id)
+);

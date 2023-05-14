@@ -49,6 +49,57 @@ impl Query {
             }
         }
     }
+
+    pub async fn user_by_id<'a>(&self, context: &Context<'a>, id: String) -> anyhow::Result<User> {
+        let _user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool: &sqlx::Pool<sqlx::Sqlite> = get_pool_from_context(context).await?;
+
+        let user = User::get_from_id(&id, pool).await?;
+
+        Ok(user)
+    }
+
+    pub async fn interacted_users<'a>(&self, context: &Context<'a>) -> anyhow::Result<Vec<User>> {
+        let _user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool: &sqlx::Pool<sqlx::Sqlite> = get_pool_from_context(context).await?;
+
+        let users = sqlx::query_as!(
+            User,
+            r#"
+            SELECT users.* FROM users 
+                JOIN group_memberships ON group_memberships.user_id = users.id
+                
+            WHERE group_memberships.group_id IN (SELECT groups.id FROM 
+                users JOIN group_memberships ON users.id=group_memberships.user_id AND users.id=$1
+                JOIN groups ON group_memberships.group_id=groups.id)
+                 
+        "#,
+            _user.id
+        )
+        .fetch_all(pool)
+        .await?;
+        Ok(users)
+    }
+
+    pub async fn groups<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<Group>> {
+        let auth = context
+            .data::<AuthTypes>()
+            .map_err(|_e| anyhow::anyhow!("Not logged in"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+
+        let pool = get_pool_from_context(context).await?;
+        let groups = auth.get_groups(pool).await?;
+        Ok(groups)
+    }
 }
 
 #[derive(Union)]

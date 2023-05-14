@@ -100,6 +100,60 @@ impl Expense {
 }
 
 impl Expense {
+    pub async fn settle_expense(
+        expense_id: &str,
+        user_id: &str,
+        amount: i64,
+        pool: &SqlitePool,
+    ) -> anyhow::Result<()> {
+        let mut transaction = pool.begin().await?;
+
+        let splits = sqlx::query!(
+            "SELECT * FROM split_transactions WHERE from_user=$1 AND expense_id=$2",
+            user_id,
+            expense_id
+        )
+        .fetch_all(&mut transaction)
+        .await?;
+
+        let mut amount_remaining = amount;
+        for split in splits {
+            if amount_remaining <= 0 {
+                break;
+            }
+            if split.amount - amount_remaining > 0 {
+                let setlleable = amount_remaining.min(split.amount - split.amount_settled);
+                let new_val = split.amount_settled + setlleable;
+                sqlx::query!(
+                    "UPDATE split_transactions SET amount_settled=$1 WHERE id=$2",
+                    new_val,
+                    split.id
+                )
+                .execute(&mut transaction)
+                .await?;
+                amount_remaining -= setlleable;
+            }
+        }
+        if amount_remaining > 0 {
+            let expense = Expense::get_from_id(expense_id, pool).await?;
+            let id = uuid::Uuid::new_v4().to_string();
+            let _data = sqlx::query!("
+                INSERT INTO split_transactions(id,expense_id,amount,from_user,to_user,amount_settled)
+                VALUES ($1, $2, $3,$4,$5,$6)
+            ",
+            id,
+            expense.id,
+            amount_remaining,
+            user_id,
+            expense.created_by,
+            0
+        ).execute(&mut transaction).await?;
+        }
+        transaction.commit().await?;
+
+        Ok(())
+    }
+
     pub async fn new_expense(
         user_id: &str,
         title: &str,
