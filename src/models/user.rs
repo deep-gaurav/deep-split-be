@@ -90,14 +90,29 @@ impl User {
     ) -> anyhow::Result<()> {
         let mut transaction = pool.begin().await?;
 
+        let amount_remaining =
+            Self::settle_for_user(&self.id, to_user, &mut transaction, amount).await?;
+        if amount_remaining > 0 {
+            return Err(anyhow::anyhow!("Cant settle more than owed"));
+        }
+        transaction.commit().await?;
+
+        Ok(())
+    }
+
+    pub async fn settle_for_user<'a>(
+        from_user: &str,
+        to_user: &str,
+        transaction: &mut sqlx::Transaction<'a, sqlx::Sqlite>,
+        amount: i64,
+    ) -> Result<i64, anyhow::Error> {
         let splits = sqlx::query!(
             "SELECT * FROM split_transactions WHERE from_user=$1 AND to_user=$2",
-            self.id,
+            from_user,
             to_user
         )
-        .fetch_all(&mut transaction)
+        .fetch_all(&mut *transaction)
         .await?;
-
         let mut amount_remaining = amount;
         for split in splits {
             if amount_remaining <= 0 {
@@ -111,17 +126,12 @@ impl User {
                     new_val,
                     split.id
                 )
-                .execute(&mut transaction)
+                .execute(&mut *transaction)
                 .await?;
                 amount_remaining -= setlleable;
             }
         }
-        if amount_remaining > 0 {
-            return Err(anyhow::anyhow!("Cant settle more than owed"));
-        }
-        transaction.commit().await?;
-
-        Ok(())
+        Ok(amount_remaining)
     }
 }
 
