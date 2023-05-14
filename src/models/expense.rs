@@ -182,8 +182,9 @@ impl Expense {
 
         for split in splits.iter() {
             let id = uuid::Uuid::new_v4().to_string();
-            let settled = amount
-                - User::settle_for_user(user_id, &split.user_id, &mut transaction, amount).await?;
+            let settled = split.amount
+                - User::settle_for_user(user_id, &split.user_id, &mut transaction, split.amount)
+                    .await?;
             let _data = sqlx::query!("
                 INSERT INTO split_transactions(id,expense_id,amount,from_user,to_user,amount_settled)
                 VALUES ($1, $2, $3,$4,$5,$6)
