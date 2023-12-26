@@ -1,8 +1,9 @@
 use async_graphql::{Context, Object, SimpleObject, Union};
+use sqlx::SqlitePool;
 
 use crate::{
     auth::AuthTypes,
-    models::{group::Group, user::User},
+    models::{expense::Expense, group::Group, user::User},
 };
 
 use super::get_pool_from_context;
@@ -63,6 +64,17 @@ impl Query {
         Ok(user)
     }
 
+    pub async fn expenses_created_by_user<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        user_id: String,
+        #[graphql(default = 0)] skip: u32,
+        #[graphql(default = 10)] limit: u32,
+    ) -> anyhow::Result<Vec<Expense>> {
+        let pool = get_pool_from_context(context).await?;
+        self.get_expenses_by_creator(&user_id, skip, limit, pool).await
+    }
+
     pub async fn interacted_users<'a>(&self, context: &Context<'a>) -> anyhow::Result<Vec<User>> {
         let _user = context
             .data::<AuthTypes>()
@@ -99,6 +111,29 @@ impl Query {
         let pool = get_pool_from_context(context).await?;
         let groups = auth.get_groups(pool).await?;
         Ok(groups)
+    }
+}
+
+impl Query {
+    pub async fn get_expenses_by_creator(
+        &self,
+        user_id: &str,
+        skip: u32,
+        limit: u32,
+        pool: &SqlitePool,
+    ) -> anyhow::Result<Vec<Expense>> {
+        let expenses = sqlx::query_as!(
+            Expense,
+            r#"SELECT 
+            id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!" 
+            FROM expenses where created_by=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"#,
+            user_id,
+            limit,
+            skip
+        )
+        .fetch_all(pool)
+        .await?;
+        Ok(expenses)
     }
 }
 
