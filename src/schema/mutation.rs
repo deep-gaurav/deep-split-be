@@ -137,11 +137,11 @@ impl Mutation {
         }
     }
 
-    pub async fn add_to_group<'ctx>(
+    pub async fn add_to_grou_by_email<'ctx>(
         &self,
         context: &Context<'ctx>,
         group_id: String,
-        phone: String,
+        email: String,
     ) -> anyhow::Result<&str> {
         let auth_type = context
             .data::<AuthTypes>()
@@ -153,7 +153,7 @@ impl Mutation {
                 let pool = get_pool_from_context(context).await?;
                 let user_groups = _user.get_groups(pool).await?;
                 if user_groups.iter().any(|group| group.id == group_id) {
-                    let user = User::get_from_phone(&phone, pool)
+                    let user = User::get_from_email(&email, pool)
                         .await
                         .map_err(|_| anyhow::anyhow!("No user with given phone"))?;
                     Group::add_to_group(&group_id, &user.id, pool)

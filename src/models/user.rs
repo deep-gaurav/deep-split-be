@@ -163,6 +163,10 @@ impl User {
         &self.phone
     }
 
+    pub async fn email(&self) -> &Option<String> {
+        &self.email
+    }
+
     pub async fn to_pay<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
         let user = context
             .data::<AuthTypes>()

@@ -36,7 +36,7 @@ impl Query {
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
         match auth_type {
             AuthTypes::UnAuthorized => Err(anyhow::anyhow!("Unauthorized")),
-            AuthTypes::AuthorizedNotSignedUp(_phone) => Err(anyhow::anyhow!("Unauthorized")),
+            AuthTypes::AuthorizedNotSignedUp(_claims) => Err(anyhow::anyhow!("Unauthorized")),
             AuthTypes::AuthorizedUser(user) => {
                 let pool = get_pool_from_context(context).await?;
                 let group = Group::get_from_id(&id, pool)
