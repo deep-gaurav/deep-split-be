@@ -72,6 +72,7 @@ async fn main() -> Result<(), ()> {
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         // allow requests from any origin
+        .allow_headers(tower_http::cors::Any)
         .allow_origin(tower_http::cors::Any);
     let app = Router::new()
         .route("/playground", get(graphql_playground))
