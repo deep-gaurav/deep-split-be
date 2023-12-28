@@ -152,7 +152,7 @@ impl Mutation {
         }
     }
 
-    pub async fn add_to_grou_by_email<'ctx>(
+    pub async fn add_to_group_by_email<'ctx>(
         &self,
         context: &Context<'ctx>,
         group_id: String,
@@ -170,7 +170,7 @@ impl Mutation {
                 if user_groups.iter().any(|group| group.id == group_id) {
                     let user = User::get_from_email(&email, pool)
                         .await
-                        .map_err(|_| anyhow::anyhow!("No user with given phone"))?;
+                        .map_err(|_| anyhow::anyhow!("No user with given email"))?;
                     Group::add_to_group(&group_id, &user.id, pool)
                         .await
                         .map_err(|_e| anyhow::anyhow!("Can't create group"))?;

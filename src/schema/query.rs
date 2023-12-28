@@ -88,13 +88,12 @@ impl Query {
         let users = sqlx::query_as!(
             User,
             r#"
-            SELECT users.* FROM users 
+            SELECT DISTINCT users.* FROM users 
                 JOIN group_memberships ON group_memberships.user_id = users.id
                 
             WHERE group_memberships.group_id IN (SELECT groups.id FROM 
                 users JOIN group_memberships ON users.id=group_memberships.user_id AND users.id=$1
                 JOIN groups ON group_memberships.group_id=groups.id)
-                 
         "#,
             _user.id
         )
