@@ -72,6 +72,24 @@ pub enum AuthResult {
     UserSignedUp(UserSignedUp),
 }
 
+impl AuthResult {
+    pub fn as_user_signed_up(&self) -> Option<&UserSignedUp> {
+        if let Self::UserSignedUp(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    pub fn try_into_user_signed_up(self) -> Result<UserSignedUp, Self> {
+        if let Self::UserSignedUp(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
+}
+
 #[derive(Debug, Serialize, SimpleObject)]
 pub struct UserNotSignedUp {
     pub signup_token: String,

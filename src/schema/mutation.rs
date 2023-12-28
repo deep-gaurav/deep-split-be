@@ -16,6 +16,12 @@ use super::get_pool_from_context;
 
 pub type OtpMap = RwLock<ExpiringHashMap<String, String>>;
 
+#[derive(Debug, SimpleObject)]
+pub struct SignupSuccess {
+    pub user: User,
+    pub tokens: UserSignedUp,
+}
+
 pub struct Mutation;
 
 #[Object]
@@ -90,7 +96,7 @@ impl Mutation {
         context: &Context<'ctx>,
         name: String,
         upi_id: Option<String>,
-    ) -> anyhow::Result<User> {
+    ) -> anyhow::Result<SignupSuccess> {
         let auth_type = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
@@ -109,7 +115,16 @@ impl Mutation {
                 )
                 .await
                 .map_err(|_e| anyhow::anyhow!("Can't create user"))?;
-                Ok(user)
+                let tokens = create_tokens(
+                    Some(user.id.clone()),
+                    user.email.clone(),
+                    user.phone.clone(),
+                )?
+                .try_into_user_signed_up()
+                .map_err(|_er| {
+                    anyhow::anyhow!("Token generation failed, user signup successfull")
+                })?;
+                Ok(SignupSuccess { user, tokens })
             }
             AuthTypes::AuthorizedUser(_user) => Err(anyhow::anyhow!("Already Registered user")),
         }
