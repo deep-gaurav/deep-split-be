@@ -3,7 +3,9 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT NOT NULL PRIMARY KEY ,
   name TEXT NOT NULL,
   notification_token TEXT,
-  phone TEXT NOT NULL UNIQUE
+  phone TEXT UNIQUE,
+  email TEXT UNIQUE,
+  CONSTRAINT check_not_null_fields CHECK (phone IS NOT NULL OR email IS NOT NULL)
 );
 
 CREATE TABLE IF NOT EXISTS groups (

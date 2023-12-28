@@ -9,7 +9,8 @@ use super::group::Group;
 pub struct User {
     pub id: String,
     pub name: String,
-    pub phone: String,
+    pub phone: Option<String>,
+    pub email: Option<String>,
 
     pub notification_token: Option<String>,
 }
@@ -17,6 +18,12 @@ pub struct User {
 impl User {
     pub async fn get_from_phone(phone: &str, pool: &SqlitePool) -> anyhow::Result<User> {
         let user = sqlx::query_as!(User, "SELECT * from users WHERE phone = $1", phone)
+            .fetch_one(pool)
+            .await?;
+        Ok(user)
+    }
+    pub async fn get_from_email(email: &str, pool: &SqlitePool) -> anyhow::Result<User> {
+        let user = sqlx::query_as!(User, "SELECT * from users WHERE email = $1", email)
             .fetch_one(pool)
             .await?;
         Ok(user)
@@ -34,19 +41,21 @@ impl User {
     pub async fn new_user(
         id: &str,
         name: &str,
-        phone: &str,
+        phone: Option<String>,
+        email: Option<String>,
         upi_id: Option<String>,
         pool: &SqlitePool,
     ) -> anyhow::Result<User> {
         let mut transaction = pool.begin().await?;
         let user = sqlx::query_as!(
             User,
-            r#"INSERT INTO users(id,name,phone) VALUES ($1,$2,$3) RETURNING id as "id!", name as "name!", phone as "phone!", notification_token"#,
+            r#"INSERT INTO users(id,name,phone,email) VALUES ($1,$2,$3,$4) RETURNING id as "id!", name as "name!", phone, email, notification_token"#,
             id,
             name,
-            phone
+            phone,
+            email
         )
-        .fetch_one(&mut transaction)
+        .fetch_one(transaction.as_mut())
         .await?;
         if let Some(upi_id) = upi_id {
             let id = uuid::Uuid::new_v4().to_string();
@@ -58,7 +67,7 @@ impl User {
                 user.id,
                 upi_id
             )
-            .execute(&mut transaction)
+            .execute(transaction.as_mut())
             .await
             .map_err(|e| {
                 log::warn!("Error {:#?}", e);
@@ -116,7 +125,7 @@ impl User {
             from_user,
             to_user
         )
-        .fetch_all(&mut *transaction)
+        .fetch_all(transaction.as_mut())
         .await?;
         let mut amount_remaining = amount;
         for split in splits {
@@ -131,7 +140,7 @@ impl User {
                     new_val,
                     split.id
                 )
-                .execute(&mut *transaction)
+                .execute(transaction.as_mut())
                 .await?;
                 amount_remaining -= setlleable;
             }
@@ -150,7 +159,7 @@ impl User {
         &self.name
     }
 
-    pub async fn phone(&self) -> &str {
+    pub async fn phone(&self) -> &Option<String> {
         &self.phone
     }
 

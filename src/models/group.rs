@@ -124,7 +124,7 @@ impl Group {
         current_time,
         creator_id
     ).fetch_one
-        (&mut transaction)
+        (transaction.as_mut())
         .await?;
 
         let membership_id = uuid::Uuid::new_v4().to_string();
@@ -134,7 +134,7 @@ impl Group {
             creator_id,
             group.id
         )
-        .execute(&mut transaction)
+        .execute( transaction.as_mut())
         .await?;
         transaction.commit().await?;
         Ok(group)

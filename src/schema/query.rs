@@ -22,9 +22,10 @@ impl Query {
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
         match auth_type {
             AuthTypes::UnAuthorized => Err(anyhow::anyhow!("Unauthorized")),
-            AuthTypes::AuthorizedNotSignedUp(phone) => {
-                Ok(UserAuth::Unregistered(Unregistered { phone }))
-            }
+            AuthTypes::AuthorizedNotSignedUp(claims) => Ok(UserAuth::Unregistered(Unregistered {
+                phone: claims.phone_number.clone(),
+                email: claims.email.clone(),
+            })),
             AuthTypes::AuthorizedUser(user) => Ok(UserAuth::Registered(Registered { user })),
         }
     }
@@ -72,7 +73,8 @@ impl Query {
         #[graphql(default = 10)] limit: u32,
     ) -> anyhow::Result<Vec<Expense>> {
         let pool = get_pool_from_context(context).await?;
-        self.get_expenses_by_creator(&user_id, skip, limit, pool).await
+        self.get_expenses_by_creator(&user_id, skip, limit, pool)
+            .await
     }
 
     pub async fn interacted_users<'a>(&self, context: &Context<'a>) -> anyhow::Result<Vec<User>> {
@@ -139,13 +141,14 @@ impl Query {
 
 #[derive(Union)]
 pub enum UserAuth<'a> {
-    Unregistered(Unregistered<'a>),
+    Unregistered(Unregistered),
     Registered(Registered<'a>),
 }
 
 #[derive(SimpleObject)]
-pub struct Unregistered<'a> {
-    pub phone: &'a str,
+pub struct Unregistered {
+    pub phone: Option<String>,
+    pub email: Option<String>,
 }
 
 #[derive(SimpleObject)]

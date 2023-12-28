@@ -113,7 +113,7 @@ impl Expense {
             user_id,
             expense_id
         )
-        .fetch_all(&mut transaction)
+        .fetch_all( transaction.as_mut())
         .await?;
 
         let mut amount_remaining = amount;
@@ -129,7 +129,7 @@ impl Expense {
                     new_val,
                     split.id
                 )
-                .execute(&mut transaction)
+                .execute( transaction.as_mut())
                 .await?;
                 amount_remaining -= setlleable;
             }
@@ -147,7 +147,7 @@ impl Expense {
             user_id,
             expense.created_by,
             0
-        ).execute(&mut transaction).await?;
+        ).execute( transaction.as_mut()).await?;
         }
         transaction.commit().await?;
 
@@ -178,7 +178,7 @@ impl Expense {
             user_id,
             group_id,
             amount,
-        ).fetch_one(&mut transaction).await?;
+        ).fetch_one(transaction.as_mut()).await?;
 
         for split in splits.iter() {
             let id = uuid::Uuid::new_v4().to_string();
@@ -195,7 +195,7 @@ impl Expense {
             split.user_id,
             user_id,
             settled
-        ).execute(&mut transaction).await.map_err(|e|
+        ).execute(transaction.as_mut()).await.map_err(|e|
        { log::warn!("FAILED {e:#?} VALUES id:{} expense:{} split_amount:{} userid:{} split_user:{}, amount:{}",
        id,
        expense.id,

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use async_graphql::{
     http::{playground_source, GraphQLPlaygroundConfig},
     EmptyMutation, EmptySubscription, Schema,
@@ -11,20 +13,29 @@ use axum::{
     Extension, Router, Server,
 };
 use axum_auth::AuthBearer;
+use expire_map::ExpiringHashMap;
 use http_cache::{CACacheManager, CacheMode, HttpCache};
 use http_cache_reqwest::Cache;
 use jsonwebtoken::DecodingKey;
 use once_cell::sync::Lazy;
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use schema::{mutation::Mutation, query::Query};
+use schema::{
+    mutation::{Mutation, OtpMap},
+    query::Query,
+};
 use serde::Deserialize;
 use sqlx::SqlitePool;
 use tower_http::cors::CorsLayer;
 
-use crate::{auth::AuthTypes, models::user::User};
+use crate::{
+    auth::{decode_access_token, AuthTypes, Claims},
+    models::user::User,
+};
 
 pub mod auth;
+pub mod email;
+pub mod expire_map;
 pub mod models;
 pub mod schema;
 
@@ -51,7 +62,10 @@ async fn main() -> Result<(), ()> {
     .await
     .expect("Cannot connect to pool");
 
+    let otp_map: OtpMap = OtpMap::new(ExpiringHashMap::new(Duration::from_secs(15 * 60)));
+
     let schema = MainSchema::build(Query, Mutation, EmptySubscription)
+        .data(otp_map)
         .extension(async_graphql::extensions::ApolloTracing)
         .finish();
 
@@ -81,63 +95,23 @@ async fn graphql_handler(
 
     token: Option<AuthBearer>,
     State(pool): State<SqlitePool>,
-    headers: HeaderMap,
     req: GraphQLRequest,
 ) -> Result<GraphQLResponse, (StatusCode, String)> {
     let mut req = req.into_inner();
     let auth_type = 'auth_type: {
         if let Some(AuthBearer(token)) = token {
-            let header = jsonwebtoken::decode_header(&token);
-            if let Ok(header) = header {
-                // log::info!("header {:#?}", header);
-                if let Some(kid) = &header.kid {
-                    let resp =  REQWEST_CLIENT.get("https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com").send().await;
-                    if let Ok(resp) = resp {
-                        let json = resp.json::<serde_json::Value>().await;
-                        if let Ok(json) = json {
-                            let sign = json
-                                .get(kid)
-                                .and_then(|val| val.as_str())
-                                .and_then(|val| DecodingKey::from_rsa_pem(val.as_bytes()).ok());
-                            if let Some(sign) = sign {
-                                #[derive(Debug, Deserialize)]
-                                struct Claims {
-                                    // aud: String,         // Optional. Audience
-                                    // exp: usize,          // Required (validate_exp defaults to true in validation). Expiration time (as UTC timestamp)
-                                    // iat: usize,          // Optional. Issued at (as UTC timestamp)
-                                    // sub: String,         // Optional. Subject (whom token refers to)
-                                    phone_number: String,
-                                }
-                                // log::info!("key {:#?}",);
-                                let claims = jsonwebtoken::decode::<Claims>(
-                                    &token,
-                                    &sign,
-                                    &jsonwebtoken::Validation::new(header.alg),
-                                );
-                                match claims {
-                                    Ok(claims) => {
-                                        let user = User::get_from_phone(
-                                            &claims.claims.phone_number,
-                                            &pool,
-                                        )
-                                        .await;
-                                        if let Ok(user) = user {
-                                            break 'auth_type AuthTypes::AuthorizedUser(user);
-                                        } else {
-                                            break 'auth_type AuthTypes::AuthorizedNotSignedUp(
-                                                claims.claims.phone_number,
-                                            );
-                                        }
-                                    }
-                                    Err(err) => {
-                                        log::warn!("jwt error {:#?}", err)
-                                    }
-                                }
-                            }
-                        }
+            let claims = decode_access_token(&token);
+            if let Ok(claims) = claims {
+                if claims.token_type.is_signup() {
+                    break 'auth_type AuthTypes::AuthorizedNotSignedUp(claims);
+                } else if claims.token_type.is_access() && claims.user_id.is_some() {
+                    let user = User::get_from_id(&claims.user_id.unwrap(), &pool).await;
+                    if let Ok(user) = user {
+                        break 'auth_type AuthTypes::AuthorizedUser(user);
                     }
                 }
             }
+
             AuthTypes::UnAuthorized
         } else {
             log::debug!("no token found");
