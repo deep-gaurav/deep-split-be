@@ -35,10 +35,15 @@ impl Mutation {
             .data::<OtpMap>()
             .map_err(|_e| anyhow::anyhow!("Something went wrong"))?;
         let otp = {
-            let mut rng = rand::thread_rng();
-            let random_number: u32 = rng.gen_range(0..1_000_000);
-            let random_string = format!("{:06}", random_number);
-            random_string
+            let mut otp_map = otp_map.write().await;
+            if let Some(otp) = otp_map.get(&email) {
+                otp.to_string()
+            } else {
+                let mut rng = rand::thread_rng();
+                let random_number: u32 = rng.gen_range(0..1_000_000);
+                let random_string = format!("{:06}", random_number);
+                random_string
+            }
         };
         {
             let mut otp_map = otp_map.write().await;
@@ -65,6 +70,7 @@ impl Mutation {
             let correct_otp = otp_map.get(&email);
             if let Some(correct_otp) = correct_otp {
                 if &otp == correct_otp {
+                    otp_map.remove(&email);
                     break 'otp true;
                 }
             }

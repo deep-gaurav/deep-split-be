@@ -62,7 +62,7 @@ async fn main() -> Result<(), ()> {
     .await
     .expect("Cannot connect to pool");
 
-    let otp_map: OtpMap = OtpMap::new(ExpiringHashMap::new(Duration::from_secs(15 * 60)));
+    let otp_map: OtpMap = OtpMap::new(ExpiringHashMap::new(Duration::from_secs(5 * 60)));
 
     let schema = MainSchema::build(Query, Mutation, EmptySubscription)
         .data(otp_map)
