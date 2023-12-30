@@ -182,12 +182,24 @@ impl Mutation {
             AuthTypes::UnAuthorized => Err(anyhow::anyhow!("Unauthorized")),
             AuthTypes::AuthorizedNotSignedUp(_phone) => Err(anyhow::anyhow!("Unauthorized")),
             AuthTypes::AuthorizedUser(_user) => {
+                let Some(name) = _user.name.clone() else {
+                    return Err(anyhow::anyhow!("wtf??"));
+                };
+
                 let pool = get_pool_from_context(context).await?;
                 let user_groups = _user.get_groups(pool).await?;
                 if user_groups.iter().any(|group| group.id == group_id) {
-                    let user = User::get_from_email(&email, pool)
-                        .await
-                        .map_err(|_| anyhow::anyhow!("No user with given email"))?;
+                    let user = User::get_from_email(&email, pool).await;
+                    let user = match user {
+                        Ok(user) => user,
+                        Err(_) => {
+                            let id = uuid::Uuid::new_v4().to_string();
+                            let user = User::new_invite_user(&id, email.to_string(), pool).await?;
+                            let _ = send_email_invite(&email, &name).await;
+                            user
+                        }
+                    };
+
                     Group::add_to_group(&group_id, &user.id, pool)
                         .await
                         .map_err(|_e| anyhow::anyhow!("Can't create group"))?;
