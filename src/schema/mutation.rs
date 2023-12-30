@@ -281,10 +281,9 @@ impl Mutation {
                 let users = futures.collect::<Vec<_>>().await;
                 let mut splits = vec![];
                 for user in users {
-                    if let Ok(user) = user {
-                        splits.push(user)
-                    } else {
-                        return Err(anyhow::anyhow!("Can not get split user"));
+                    match user {
+                        Ok(user) => splits.push(user),
+                        Err(err) => return Err(anyhow::anyhow!("Can not get split user {err:?}")),
                     }
                 }
                 let id = uuid::Uuid::new_v4().to_string();
