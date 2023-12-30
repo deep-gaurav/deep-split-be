@@ -1,12 +1,14 @@
 use async_graphql::{Context, InputObject, Object, SimpleObject};
+use futures::{stream::FuturesUnordered, StreamExt};
 use rand::Rng;
+use sqlx::{Pool, Sqlite};
 use tokio::sync::RwLock;
 
 use crate::{
     auth::{create_tokens, decode_refresh_token, AuthResult, AuthTypes, UserSignedUp},
-    email::send_email_otp,
+    email::{send_email_invite, send_email_otp},
     expire_map::ExpiringHashMap,
-    models::{expense::Expense, group::Group, user::User},
+    models::{expense::Expense, group::Group, split, user::User},
 };
 
 use super::get_pool_from_context;
@@ -17,6 +19,12 @@ pub type OtpMap = RwLock<ExpiringHashMap<String, String>>;
 pub struct SignupSuccess {
     pub user: User,
     pub tokens: UserSignedUp,
+}
+
+#[derive(SimpleObject)]
+pub struct NonGroupExpense {
+    pub group: Group,
+    pub expense: Expense,
 }
 
 pub struct Mutation;
@@ -76,7 +84,13 @@ impl Mutation {
         if correct_otp {
             let user = User::get_from_email(&email, pool).await;
             match user {
-                Ok(user) => create_tokens(Some(user.id), user.email, user.phone),
+                Ok(user) => {
+                    if user.name.is_some() {
+                        create_tokens(None, user.email, user.phone)
+                    } else {
+                        create_tokens(Some(user.id), user.email, user.phone)
+                    }
+                }
                 Err(_) => create_tokens(None, Some(email), None),
             }
         } else {
@@ -136,7 +150,7 @@ impl Mutation {
     pub async fn create_group<'ctx>(
         &self,
         context: &Context<'ctx>,
-        name: Option<String>,
+        name: String,
     ) -> anyhow::Result<Group> {
         let auth_type = context
             .data::<AuthTypes>()
@@ -147,7 +161,7 @@ impl Mutation {
             AuthTypes::AuthorizedUser(_user) => {
                 let pool = get_pool_from_context(context).await?;
                 let id = uuid::Uuid::new_v4().to_string();
-                let group = Group::create_group(&id, &_user.id, name, pool)
+                let group = Group::create_group(&id, &_user.id, Some(name), pool)
                     .await
                     .map_err(|_e| anyhow::anyhow!("Can't create group"))?;
                 Ok(group)
@@ -181,6 +195,89 @@ impl Mutation {
                 } else {
                     Err(anyhow::anyhow!("You must be in group to add other user"))
                 }
+            }
+        }
+    }
+
+    pub async fn add_non_group_expense<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        title: String,
+        amount: i64,
+        splits: Vec<SplitInputNonGroup>,
+    ) -> anyhow::Result<NonGroupExpense> {
+        let auth_type = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
+        match auth_type {
+            AuthTypes::UnAuthorized => Err(anyhow::anyhow!("Unauthorized")),
+            AuthTypes::AuthorizedNotSignedUp(_phone) => Err(anyhow::anyhow!("Unauthorized")),
+            AuthTypes::AuthorizedUser(_user) => {
+                let pool = get_pool_from_context(context).await?;
+                let futures = FuturesUnordered::new();
+                let Some(name) = _user.name.clone() else {
+                    return Err(anyhow::anyhow!("wtf??"));
+                };
+
+                // let mut split_users = vec![];
+
+                async fn map_split_input_group_to_user(
+                    split: &SplitInputNonGroup,
+                    inviter: String,
+                    pool: &Pool<Sqlite>,
+                ) -> anyhow::Result<SplitInput> {
+                    if let Some(user_id) = &split.user_id {
+                        let user = User::get_from_id(user_id, pool).await?;
+                        Ok(SplitInput {
+                            user_id: user.id,
+                            amount: split.amount,
+                        })
+                    } else if let Some(email) = &split.email {
+                        if let Ok(user) = User::get_from_email(email, pool).await {
+                            Ok(SplitInput {
+                                user_id: user.id,
+                                amount: split.amount,
+                            })
+                        } else {
+                            let id = uuid::Uuid::new_v4().to_string();
+                            let user = User::new_invite_user(&id, email.to_string(), pool).await?;
+                            let _ = send_email_invite(email, &inviter).await;
+                            Ok(SplitInput {
+                                user_id: user.id,
+                                amount: split.amount,
+                            })
+                        }
+                    } else {
+                        Err(anyhow::anyhow!("User must have user id or email"))
+                    }
+                }
+                for split in splits.iter() {
+                    futures.push(map_split_input_group_to_user(split, name.clone(), pool))
+                }
+
+                let users = futures.collect::<Vec<_>>().await;
+                let mut splits = vec![];
+                for user in users {
+                    if let Ok(user) = user {
+                        splits.push(user)
+                    } else {
+                        return Err(anyhow::anyhow!("Can not get split user"));
+                    }
+                }
+                let id = uuid::Uuid::new_v4().to_string();
+                let group = Group::create_group(&id, &_user.id, None, pool).await?;
+                let futures = FuturesUnordered::new();
+                for user in splits.iter() {
+                    futures.push(Group::add_to_group(&group.id, &user.user_id, pool))
+                }
+                let result = futures.collect::<Vec<_>>().await;
+                if result.iter().any(|v| v.is_err()) {
+                    return Err(anyhow::anyhow!("Cannot add everyone to group"));
+                }
+                let expense = self
+                    .add_expense(context, group.id.to_string(), title, amount, splits)
+                    .await?;
+                Ok(NonGroupExpense { group, expense })
             }
         }
     }
@@ -253,4 +350,11 @@ impl Mutation {
 pub struct SplitInput {
     pub amount: i64,
     pub user_id: String,
+}
+
+#[derive(InputObject)]
+pub struct SplitInputNonGroup {
+    pub amount: i64,
+    pub email: Option<String>,
+    pub user_id: Option<String>,
 }

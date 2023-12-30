@@ -74,3 +74,63 @@ pub async fn send_email_otp(to_email: &str, otp: &str) -> anyhow::Result<()> {
         Ok(())
     }
 }
+
+pub async fn send_email_invite(to_email: &str, inviter: &str) -> anyhow::Result<()> {
+    let auth_tok = std::env::var("EMAIL_AUTH_TOK")?;
+    let email_payload = EmailPayload {
+        from: EmailContact {
+            name: "Split Buddy".to_string().into(),
+            email: "split@deepwith.in".to_string(),
+        },
+        reply_to: vec![],
+        cc: vec![],
+        bcc: vec![],
+        to: vec![EmailContact {
+            name: None,
+            email: to_email.to_string(),
+        }],
+        subject: "Your One-Time Passcode for SplitBuddy Signup/Login".to_string(),
+        content: vec![
+            EmailContent{
+                mime:"text/html".to_string(),
+                value: r##"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html charset=UTF-8" />
+    <title>Join Split Buddy - Expense Sharing Made Easy</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0;">
+    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+    <tr>
+        <td style="padding: 20px;">
+        <h2 style="font-size: 24px;">Join Split Buddy - Expense Sharing Made Easy!</h2>
+        <p>Hello there!</p>
+        <p>You've been invited by <strong>[INVITER_NAME]</strong> to join Split Buddy, a convenient app to share expenses seamlessly with friends. <strong>[INVITER_NAME]</strong> wants to share an expense with you!</p>
+        <p style="margin-bottom: 20px;">To start splitting bills hassle-free, simply <a href="https://split.deepwith.in/" style="display: inline-block; padding: 10px 20px; text-decoration: none; background-color: #007bff; color: #fff; border-radius: 3px;">Join Now</a></p>
+        <p>If the button above doesn't work, you can copy and paste the following link into your browser:</p>
+        <p style="margin-bottom: 20px;">https://split.deepwith.in/</p>
+        <p>We're excited to have you on board!</p>
+        <p>Best regards,<br>Your Split Buddy Team</p>
+        </td>
+    </tr>
+    </table>
+</body>
+</html>        
+                "##.replace("[INVITER_NAME]", inviter)
+            }
+        ],
+    };
+    let request = REQWEST_CLIENT
+        .post("https://worker-email-production.deepgauravraj.workers.dev/api/email")
+        .header("Authorization", auth_tok)
+        .json(&email_payload)
+        .send()
+        .await?;
+    if !request.status().is_success() {
+        Err(anyhow::anyhow!("Cant send email"))
+    } else {
+        Ok(())
+    }
+}

@@ -8,7 +8,7 @@ use super::group::Group;
 #[derive(Debug, Clone)]
 pub struct User {
     pub id: String,
-    pub name: String,
+    pub name: Option<String>,
     pub phone: Option<String>,
     pub email: Option<String>,
 
@@ -36,7 +36,33 @@ impl User {
         Ok(user)
     }
 
-    // pub async
+    pub async fn set_user_name(id: &str, name: &str, pool: &SqlitePool) -> anyhow::Result<User> {
+        let user = sqlx::query_as!(
+            User,
+            r#"UPDATE users SET name = $2 where id=$1 RETURNING id as "id!", name, phone, email, notification_token"#,
+            id,
+            name
+        )
+        .fetch_one(pool)
+        .await?;
+        Ok(user)
+    }
+
+    pub async fn new_invite_user(
+        id: &str,
+        email: String,
+        pool: &SqlitePool,
+    ) -> anyhow::Result<User> {
+        let user = sqlx::query_as!(
+            User,
+            r#"INSERT INTO users(id,email) VALUES ($1,$2) RETURNING id as "id!", name, phone, email, notification_token"#,
+            id,
+            email
+        )
+        .fetch_one(pool)
+        .await?;
+        Ok(user)
+    }
 
     pub async fn new_user(
         id: &str,
@@ -49,7 +75,7 @@ impl User {
         let mut transaction = pool.begin().await?;
         let user = sqlx::query_as!(
             User,
-            r#"INSERT INTO users(id,name,phone,email) VALUES ($1,$2,$3,$4) RETURNING id as "id!", name as "name!", phone, email, notification_token"#,
+            r#"INSERT INTO users(id,name,phone,email) VALUES ($1,$2,$3,$4) RETURNING id as "id!", name, phone, email, notification_token"#,
             id,
             name,
             phone,
@@ -155,7 +181,7 @@ impl User {
         &self.id
     }
 
-    pub async fn name(&self) -> &str {
+    pub async fn name(&self) -> &Option<String> {
         &self.name
     }
 
@@ -165,6 +191,10 @@ impl User {
 
     pub async fn email(&self) -> &Option<String> {
         &self.email
+    }
+
+    pub async fn is_signed_up(&self) -> bool {
+        self.name.is_some()
     }
 
     pub async fn to_pay<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
