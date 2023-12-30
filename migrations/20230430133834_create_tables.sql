@@ -1,7 +1,7 @@
 -- Add migration script here
 CREATE TABLE IF NOT EXISTS users (
   id TEXT NOT NULL PRIMARY KEY ,
-  name TEXT NOT NULL,
+  name TEXT,
   notification_token TEXT,
   phone TEXT UNIQUE,
   email TEXT UNIQUE,
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS groups (
   id TEXT PRIMARY KEY NOT NULL,
-  name TEXT NOT NULL,
+  name TEXT,
   creator_id TEXT NOT NULL,
   created_at TEXT NOT NULL,
 

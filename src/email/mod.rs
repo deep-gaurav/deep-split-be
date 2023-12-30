@@ -89,7 +89,7 @@ pub async fn send_email_invite(to_email: &str, inviter: &str) -> anyhow::Result<
             name: None,
             email: to_email.to_string(),
         }],
-        subject: "Your One-Time Passcode for SplitBuddy Signup/Login".to_string(),
+        subject: "Join [INVITER_NAME] on Split Buddy for Easy Expense Sharing".replace("[INVITER_NAME]", inviter),
         content: vec![
             EmailContent{
                 mime:"text/html".to_string(),
