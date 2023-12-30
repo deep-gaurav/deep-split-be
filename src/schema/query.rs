@@ -105,13 +105,34 @@ impl Query {
     pub async fn groups<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<Group>> {
         let auth = context
             .data::<AuthTypes>()
-            .map_err(|_e| anyhow::anyhow!("Not logged in"))?
+            .map_err(|_e| anyhow::anyhow!("Unauthorized"))?
             .as_authorized_user()
-            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
 
         let pool = get_pool_from_context(context).await?;
         let groups = auth.get_groups(pool).await?;
         Ok(groups)
+    }
+
+    pub async fn find_user_by_email<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        email: String,
+    ) -> anyhow::Result<User> {
+        let _auth = context
+            .data::<AuthTypes>()
+            .map_err(|_e| anyhow::anyhow!("Unauthorized"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+
+        let user = User::get_from_email(&email, pool).await;
+
+        if let Ok(user) = user {
+            Ok(user)
+        } else {
+            Err(anyhow::anyhow!("No User with given email"))
+        }
     }
 }
 

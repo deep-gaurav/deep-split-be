@@ -1,8 +1,5 @@
-use std::{sync::Arc, todo, unimplemented};
-
 use async_graphql::{Context, InputObject, Object, SimpleObject};
 use rand::Rng;
-use serde::Serialize;
 use tokio::sync::RwLock;
 
 use crate::{
@@ -139,7 +136,7 @@ impl Mutation {
     pub async fn create_group<'ctx>(
         &self,
         context: &Context<'ctx>,
-        name: String,
+        name: Option<String>,
     ) -> anyhow::Result<Group> {
         let auth_type = context
             .data::<AuthTypes>()
@@ -150,7 +147,7 @@ impl Mutation {
             AuthTypes::AuthorizedUser(_user) => {
                 let pool = get_pool_from_context(context).await?;
                 let id = uuid::Uuid::new_v4().to_string();
-                let group = Group::create_group(&id, &_user.id, &name, pool)
+                let group = Group::create_group(&id, &_user.id, name, pool)
                     .await
                     .map_err(|_e| anyhow::anyhow!("Can't create group"))?;
                 Ok(group)

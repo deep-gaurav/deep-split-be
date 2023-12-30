@@ -7,7 +7,7 @@ use super::{expense::Expense, user::User};
 
 pub struct Group {
     pub id: String,
-    pub name: String,
+    pub name: Option<String>,
     pub created_at: String,
     pub creator_id: String,
 }
@@ -17,7 +17,7 @@ impl Group {
     pub async fn id(&self) -> &str {
         &self.id
     }
-    pub async fn name(&self) -> &str {
+    pub async fn name(&self) -> &Option<String> {
         &self.name
     }
     pub async fn created_at(&self) -> &str {
@@ -110,7 +110,7 @@ impl Group {
     pub async fn create_group(
         id: &str,
         creator_id: &str,
-        name: &str,
+        name: Option<String>,
         pool: &SqlitePool,
     ) -> anyhow::Result<Group> {
         let mut transaction = pool.begin().await?;
@@ -118,7 +118,7 @@ impl Group {
         let current_time = chrono::Utc::now().to_rfc3339();
         let group = sqlx::query_as!(
             Group,
-        r#"INSERT INTO groups(id,name,created_at,creator_id) VALUES ($1,$2,$3,$4) RETURNING id as "id!", name as "name!", created_at as "created_at!", creator_id as "creator_id!""#,
+        r#"INSERT INTO groups(id,name,created_at,creator_id) VALUES ($1,$2,$3,$4) RETURNING id as "id!", name, created_at as "created_at!", creator_id as "creator_id!""#,
         id,
         name,
         current_time,
@@ -134,7 +134,7 @@ impl Group {
             creator_id,
             group.id
         )
-        .execute( transaction.as_mut())
+        .execute(transaction.as_mut())
         .await?;
         transaction.commit().await?;
         Ok(group)
