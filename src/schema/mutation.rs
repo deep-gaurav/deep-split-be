@@ -85,7 +85,7 @@ impl Mutation {
             let user = User::get_from_email(&email, pool).await;
             match user {
                 Ok(user) => {
-                    if user.name.is_some() {
+                    if user.name.is_none() {
                         create_tokens(None, user.email, user.phone)
                     } else {
                         create_tokens(Some(user.id), user.email, user.phone)
