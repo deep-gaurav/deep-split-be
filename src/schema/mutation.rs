@@ -121,17 +121,28 @@ impl Mutation {
             AuthTypes::UnAuthorized => Err(anyhow::anyhow!("Unauthorized")),
             AuthTypes::AuthorizedNotSignedUp(claims) => {
                 let pool = get_pool_from_context(context).await?;
-                let id = uuid::Uuid::new_v4().to_string();
-                let user = User::new_user(
-                    &id,
-                    &name,
-                    claims.phone_number.clone(),
-                    claims.email.clone(),
-                    upi_id,
-                    pool,
-                )
-                .await
-                .map_err(|_e| anyhow::anyhow!("Can't create user"))?;
+                let email = claims
+                    .email
+                    .clone()
+                    .ok_or(anyhow::anyhow!("Only email is supported now"))?;
+                let user = match User::get_from_email(&email, pool).await {
+                    Ok(user) => User::set_user_name(&user.id, &name, pool).await?,
+                    Err(_) => {
+                        let id = uuid::Uuid::new_v4().to_string();
+
+                        User::new_user(
+                            &id,
+                            &name,
+                            claims.phone_number.clone(),
+                            claims.email.clone(),
+                            upi_id,
+                            pool,
+                        )
+                        .await
+                        .map_err(|_e| anyhow::anyhow!("Can't create user"))?
+                    }
+                };
+
                 let tokens = create_tokens(
                     Some(user.id.clone()),
                     user.email.clone(),
