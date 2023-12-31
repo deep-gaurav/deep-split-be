@@ -53,6 +53,12 @@ impl Query {
     }
 
     pub async fn user_by_id<'a>(&self, context: &Context<'a>, id: String) -> anyhow::Result<User> {
+        let auth_type = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
+        let _ = auth_type
+            .as_authorized_user()
+            .ok_or(anyhow::anyhow!("Unauthorized"))?;
         let _user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
@@ -65,16 +71,21 @@ impl Query {
         Ok(user)
     }
 
-    pub async fn expenses_created_by_user<'ctx>(
+    pub async fn expenses_with_user<'ctx>(
         &self,
         context: &Context<'ctx>,
         user_id: String,
         #[graphql(default = 0)] skip: u32,
         #[graphql(default = 10)] limit: u32,
     ) -> anyhow::Result<Vec<Expense>> {
+        let auth_type = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
+        let user = auth_type
+            .as_authorized_user()
+            .ok_or(anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
-        self.get_expenses_by_creator(&user_id, skip, limit, pool)
-            .await
+        Self::get_expenses_with_user(&user.id, &user_id, skip, limit, pool).await
     }
 
     pub async fn interacted_users<'a>(&self, context: &Context<'a>) -> anyhow::Result<Vec<User>> {
@@ -150,6 +161,33 @@ impl Query {
             id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!" 
             FROM expenses where created_by=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"#,
             user_id,
+            limit,
+            skip
+        )
+        .fetch_all(pool)
+        .await?;
+        Ok(expenses)
+    }
+
+    pub async fn get_expenses_with_user(
+        user_1: &str,
+        user_2: &str,
+        skip: u32,
+        limit: u32,
+        pool: &SqlitePool,
+    ) -> anyhow::Result<Vec<Expense>> {
+        let expenses = sqlx::query_as!(
+            Expense,
+            r#"
+SELECT e.id, e.title, e.created_at, e.created_by, e.group_id, e.amount
+FROM expenses e
+JOIN split_transactions s ON e.id = s.expense_id
+WHERE (s.from_user = $1 AND s.to_user = $2)
+OR (s.from_user = $2 AND s.to_user = $1)
+ORDER BY created_at DESC LIMIT $3 OFFSET $4
+            "#,
+            user_1,
+            user_2,
             limit,
             skip
         )
