@@ -100,6 +100,32 @@ impl Group {
 }
 
 impl Group {
+    pub async fn find_group_for_users(
+        users: Vec<String>,
+        pool: &SqlitePool,
+    ) -> anyhow::Result<Group> {
+        let users_count = users.len().to_string();
+        let users = users.join(",");
+        let gid = sqlx::query_as!(
+            Group,
+            r##"
+            
+            SELECT g.*
+            FROM groups g
+            INNER JOIN group_memberships gm ON g.id = gm.group_id
+            WHERE gm.user_id IN ($1) AND g.name IS NULL
+            GROUP BY g.id
+            HAVING COUNT(DISTINCT gm.user_id) = $2
+               AND COUNT(*) = $2
+
+            "##,
+            users,
+            users_count
+        )
+        .fetch_one(pool)
+        .await?;
+        Ok(gid)
+    }
     pub async fn get_from_id(id: &str, pool: &SqlitePool) -> anyhow::Result<Group> {
         let group = sqlx::query_as!(Group, "SELECT * from groups WHERE id = $1", id)
             .fetch_one(pool)

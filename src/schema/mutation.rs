@@ -8,7 +8,7 @@ use crate::{
     auth::{create_tokens, decode_refresh_token, AuthResult, AuthTypes, UserSignedUp},
     email::{send_email_invite, send_email_otp},
     expire_map::ExpiringHashMap,
-    models::{expense::Expense, group::Group, split, user::User},
+    models::{expense::Expense, group::Group, user::User},
 };
 
 use super::get_pool_from_context;
@@ -286,16 +286,25 @@ impl Mutation {
                         Err(err) => return Err(anyhow::anyhow!("Can not get split user {err:?}")),
                     }
                 }
-                let id = uuid::Uuid::new_v4().to_string();
-                let group = Group::create_group(&id, &_user.id, None, pool).await?;
-                let futures = FuturesUnordered::new();
-                for user in splits.iter() {
-                    futures.push(Group::add_to_group(&group.id, &user.user_id, pool))
-                }
-                let result = futures.collect::<Vec<_>>().await;
-                if result.iter().any(|v| v.is_err()) {
-                    return Err(anyhow::anyhow!("Cannot add everyone to group"));
-                }
+                let mut user_ids = vec![_user.id.clone()];
+                splits.iter().for_each(|f| user_ids.push(f.user_id.clone()));
+
+                let group = match Group::find_group_for_users(user_ids, pool).await {
+                    Ok(gid) => gid,
+                    Err(_) => {
+                        let id = uuid::Uuid::new_v4().to_string();
+                        let group = Group::create_group(&id, &_user.id, None, pool).await?;
+                        let futures = FuturesUnordered::new();
+                        for user in splits.iter() {
+                            futures.push(Group::add_to_group(&group.id, &user.user_id, pool))
+                        }
+                        let result = futures.collect::<Vec<_>>().await;
+                        if result.iter().any(|v| v.is_err()) {
+                            return Err(anyhow::anyhow!("Cannot add everyone to group"));
+                        }
+                        group
+                    }
+                };
                 let expense = self
                     .add_expense(context, group.id.to_string(), title, amount, splits)
                     .await?;

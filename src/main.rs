@@ -2,12 +2,12 @@ use std::time::Duration;
 
 use async_graphql::{
     http::{playground_source, GraphQLPlaygroundConfig},
-    EmptyMutation, EmptySubscription, Schema,
+    EmptySubscription, Schema,
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::{
     extract::State,
-    http::{HeaderMap, Method, StatusCode},
+    http::{Method, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
     Extension, Router, Server,
@@ -16,7 +16,7 @@ use axum_auth::AuthBearer;
 use expire_map::ExpiringHashMap;
 use http_cache::{CACacheManager, CacheMode, HttpCache};
 use http_cache_reqwest::Cache;
-use jsonwebtoken::DecodingKey;
+
 use once_cell::sync::Lazy;
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -24,12 +24,12 @@ use schema::{
     mutation::{Mutation, OtpMap},
     query::Query,
 };
-use serde::Deserialize;
+
 use sqlx::SqlitePool;
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    auth::{decode_access_token, AuthTypes, Claims},
+    auth::{decode_access_token, AuthTypes},
     models::user::User,
 };
 
