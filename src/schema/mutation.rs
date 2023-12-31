@@ -289,9 +289,14 @@ impl Mutation {
                 let mut user_ids = vec![_user.id.clone()];
                 splits.iter().for_each(|f| user_ids.push(f.user_id.clone()));
 
+                log::info!("Searching for groups with users {user_ids:?}");
                 let group = match Group::find_group_for_users(user_ids, pool).await {
-                    Ok(gid) => gid,
-                    Err(_) => {
+                    Ok(gid) => {
+                        log::info!("Found existing group {gid:?}");
+                        gid
+                    }
+                    Err(err) => {
+                        log::info!("Not found existing group {err:?}");
                         let id = uuid::Uuid::new_v4().to_string();
                         let group = Group::create_group(&id, &_user.id, None, pool).await?;
                         let futures = FuturesUnordered::new();

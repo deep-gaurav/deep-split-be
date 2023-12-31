@@ -5,6 +5,7 @@ use crate::{auth::AuthTypes, schema::get_pool_from_context};
 
 use super::{expense::Expense, user::User};
 
+#[derive(Debug, sqlx::FromRow)]
 pub struct Group {
     pub id: String,
     pub name: Option<String>,
@@ -105,26 +106,38 @@ impl Group {
         pool: &SqlitePool,
     ) -> anyhow::Result<Group> {
         let users_count = users.len().to_string();
-        let users = users.join(",");
-        let gid = sqlx::query_as!(
-            Group,
-            r##"
-            
-            SELECT g.*
-            FROM groups g
-            INNER JOIN group_memberships gm ON g.id = gm.group_id
-            WHERE gm.user_id IN ($1) AND g.name IS NULL
-            GROUP BY g.id
-            HAVING COUNT(DISTINCT gm.user_id) = $2
-               AND COUNT(*) = $2
+        // let users = users.join(",");
 
-            "##,
-            users,
-            users_count
-        )
-        .fetch_one(pool)
-        .await?;
-        Ok(gid)
+        //TODO: stuck due to https://github.com/launchbadge/sqlx/issues/875
+        let in_string = (1..=users.len())
+            .map(|i| format!("${}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        log::info!("User Count {users_count}");
+        let query_string = r##"
+            
+        SELECT g.*
+        FROM groups g
+        INNER JOIN group_memberships gm ON g.id = gm.group_id
+        WHERE gm.user_id IN ({QUERY_IN}) 
+        AND g.name IS NULL
+        GROUP BY g.id
+        HAVING COUNT(DISTINCT gm.user_id) = ${END_BIND}
+        AND COUNT(*) = ${END_BIND}
+
+        "##
+        .replace("{QUERY_IN}", &in_string)
+        .replace("{END_BIND}", (users.len() + 1).to_string().as_str());
+        log::info!("Querying {query_string}");
+        let mut query = sqlx::query_as::<_, Group>(&query_string);
+        for user in users.iter() {
+            query = query.bind(user);
+        }
+        query = query.bind(users.len() as i64);
+
+        let group = query.fetch_one(pool).await?;
+        Ok(group)
     }
     pub async fn get_from_id(id: &str, pool: &SqlitePool) -> anyhow::Result<Group> {
         let group = sqlx::query_as!(Group, "SELECT * from groups WHERE id = $1", id)
