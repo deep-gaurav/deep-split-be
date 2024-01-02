@@ -1,4 +1,4 @@
-use async_graphql::{Context, Object};
+use async_graphql::{Context, Object, SimpleObject};
 use sqlx::SqlitePool;
 
 use crate::{auth::AuthTypes, schema::get_pool_from_context};
@@ -122,57 +122,114 @@ impl User {
         Ok(groups)
     }
 
-    pub async fn settle_expense(
-        &self,
+    pub async fn get_owes_with_group(
         to_user: &str,
-        amount: i64,
-        pool: &SqlitePool,
-    ) -> anyhow::Result<()> {
-        let mut transaction = pool.begin().await?;
-
-        let amount_remaining =
-            Self::settle_for_user(&self.id, to_user, &mut transaction, amount).await?;
-        if amount_remaining > 0 {
-            return Err(anyhow::anyhow!("Cant settle more than owed"));
-        }
-        transaction.commit().await?;
-
-        Ok(())
-    }
-
-    pub async fn settle_for_user<'a>(
         from_user: &str,
-        to_user: &str,
-        transaction: &mut sqlx::Transaction<'a, sqlx::Sqlite>,
-        amount: i64,
-    ) -> Result<i64, anyhow::Error> {
-        let splits = sqlx::query!(
-            "SELECT * FROM split_transactions WHERE from_user=$1 AND to_user=$2",
+        pool: &SqlitePool,
+    ) -> anyhow::Result<Vec<OwedInGroup>> {
+        let to_pay = sqlx::query!(
+            "
+            SELECT group_id, SUM(net_owed_amount) AS total_net_owed_amount 
+            FROM (
+                SELECT 
+                    from_user,
+                    to_user,
+                    group_id,
+                    SUM(CASE WHEN from_user = $1 THEN amount ELSE -amount END) AS net_owed_amount
+                FROM 
+                    split_transactions
+                WHERE 
+                    (from_user = $1 AND to_user = $2) OR 
+                    (from_user = $2 AND to_user = $1)
+                GROUP BY 
+                    from_user, to_user, group_id
+            ) GROUP BY group_id
+            ",
             from_user,
-            to_user
+            to_user,
         )
-        .fetch_all(transaction.as_mut())
-        .await?;
-        let mut amount_remaining = amount;
-        for split in splits {
-            if amount_remaining <= 0 {
-                break;
-            }
-            if split.amount - amount_remaining > 0 {
-                let setlleable = amount_remaining.min(split.amount - split.amount_settled);
-                let new_val = split.amount_settled + setlleable;
-                sqlx::query!(
-                    "UPDATE split_transactions SET amount_settled=$1 WHERE id=$2",
-                    new_val,
-                    split.id
-                )
-                .execute(transaction.as_mut())
-                .await?;
-                amount_remaining -= setlleable;
-            }
-        }
-        Ok(amount_remaining)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(|f| OwedInGroup {
+            group_id: f.group_id,
+            amount: f.total_net_owed_amount,
+        })
+        .collect();
+        Ok(to_pay)
     }
+
+    // pub async fn settle_expense(
+    //     &self,
+    //     to_user: &str,
+    //     amount: i64,
+    //     pool: &SqlitePool,
+    // ) -> anyhow::Result<()> {
+    //     let mut transaction = pool.begin().await?;
+
+    //     let amount_remaining =
+    //         Self::settle_for_user(&self.id, to_user, &mut transaction, amount).await?;
+    //     if amount_remaining > 0 {
+    //         return Err(anyhow::anyhow!("Cant settle more than owed"));
+    //     }
+    //     transaction.commit().await?;
+
+    //     Ok(())
+    // }
+
+    // pub async fn settle_for_user<'a>(
+    //     from_user: &str,
+    //     to_user: &str,
+    //     transaction: &mut sqlx::Transaction<'a, sqlx::Sqlite>,
+    //     amount: i64,
+    // ) -> Result<i64, anyhow::Error> {
+    //     let group_owed = sqlx::query!(
+    //         r#"
+
+    //         SELECT
+    //         from_user,
+    //         to_user,
+    //         SUM(CASE WHEN from_user = $1 THEN amount ELSE -amount END) AS net_owed_amount
+    //     FROM
+    //         split_transactions
+    //     WHERE
+    //         ((from_user = $1) OR
+    //         (to_user = $1))
+    //     GROUP BY
+    //         from_user, to_user, group_id
+    //         "#,
+    //         &from_user,
+    //     )
+    //     .fetch_all(transaction.as_mut())
+    //     .await?;
+
+    //     let splits = sqlx::query!(
+    //         "SELECT * FROM split_transactions WHERE from_user=$1 AND to_user=$2",
+    //         from_user,
+    //         to_user
+    //     )
+    //     .fetch_all(transaction.as_mut())
+    //     .await?;
+    //     let mut amount_remaining = amount;
+    //     for split in splits {
+    //         if amount_remaining <= 0 {
+    //             break;
+    //         }
+    //         if split.amount - amount_remaining > 0 {
+    //             let setlleable = amount_remaining.min(split.amount - split.amount_settled);
+    //             let new_val = split.amount_settled + setlleable;
+    //             sqlx::query!(
+    //                 "UPDATE split_transactions SET amount_settled=$1 WHERE id=$2",
+    //                 new_val,
+    //                 split.id
+    //             )
+    //             .execute(transaction.as_mut())
+    //             .await?;
+    //             amount_remaining -= setlleable;
+    //         }
+    //     }
+    //     Ok(amount_remaining)
+    // }
 }
 
 #[Object]
@@ -197,7 +254,7 @@ impl User {
         self.name.is_some()
     }
 
-    pub async fn to_pay<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
+    pub async fn owes<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<OwedInGroup>> {
         let user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
@@ -205,34 +262,63 @@ impl User {
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
         if self.id == user.id {
-            let to_pay = sqlx::query!(
-                "
-                SELECT SUM(amount-amount_settled) as to_pay FROM split_transactions
-                WHERE from_user = $1
-            ",
-                self.id
-            )
-            .fetch_one(pool)
-            .await?
-            .to_pay
-            .unwrap_or_default();
-            Ok(to_pay)
+            Ok(vec![])
         } else {
-            let to_pay = sqlx::query!(
-                "
-            SELECT SUM(amount-amount_settled) as to_pay FROM split_transactions
-            WHERE to_user = $1 AND from_user = $2
-        ",
-                self.id,
-                user.id
-            )
-            .fetch_one(pool)
-            .await?
-            .to_pay
-            .unwrap_or_default();
-            Ok(to_pay)
+            Self::get_owes_with_group(&self.id, &user.id, pool).await
         }
     }
+
+    // pub async fn owed<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
+    //     let user = context
+    //         .data::<AuthTypes>()
+    //         .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+    //         .as_authorized_user()
+    //         .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+    //     let pool = get_pool_from_context(context).await?;
+    //     if self.id == user.id {
+    //         let to_pay = sqlx::query!(
+    //             "
+    //             SELECT SUM(net_owed_amount) AS total_net_owed_amount
+    //             FROM (
+    //                 SELECT
+    //                     SUM(CASE WHEN from_user = $1 THEN amount ELSE -amount END) AS net_owed_amount
+    //                 FROM
+    //                     split_transactions
+    //                 WHERE
+    //                     from_user = $1 OR
+    //                     to_user = $1
+    //             ) AS subquery_alias;
+    //         ",
+    //             self.id
+    //         )
+    //         .fetch_one(pool)
+    //         .await?
+    //         .total_net_owed_amount;
+    //         Ok(to_pay.unwrap_or_default())
+    //     } else {
+    //         let to_pay = sqlx::query!(
+    //             "
+    //         SELECT
+    //             from_user,
+    //             to_user,
+    //             SUM(CASE WHEN from_user = $1 THEN amount ELSE -amount END) AS net_owed_amount
+    //         FROM
+    //             split_transactions
+    //         WHERE
+    //             (from_user = $1 AND to_user = $2) OR
+    //             (from_user = $2 AND to_user = $1)
+    //         GROUP BY
+    //             from_user, to_user
+    //     ",
+    //             user.id,
+    //             self.id,
+    //         )
+    //         .fetch_one(pool)
+    //         .await?
+    //         .net_owed_amount;
+    //         Ok(to_pay)
+    //     }
+    // }
 
     pub async fn upi_ids<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<String>> {
         let _user = context
@@ -253,41 +339,10 @@ impl User {
         .collect();
         Ok(id)
     }
+}
 
-    pub async fn to_receive<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
-        let user = context
-            .data::<AuthTypes>()
-            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
-            .as_authorized_user()
-            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
-        let pool = get_pool_from_context(context).await?;
-        if self.id == user.id {
-            let to_pay = sqlx::query!(
-                "
-                SELECT SUM(amount-amount_settled) as to_pay FROM split_transactions
-                WHERE to_user = $1
-            ",
-                self.id,
-            )
-            .fetch_one(pool)
-            .await?
-            .to_pay
-            .unwrap_or_default();
-            Ok(to_pay)
-        } else {
-            let to_pay = sqlx::query!(
-                "
-                SELECT SUM(amount-amount_settled) as to_pay FROM split_transactions
-                WHERE to_user = $1 AND from_user = $2
-            ",
-                user.id,
-                self.id,
-            )
-            .fetch_one(pool)
-            .await?
-            .to_pay
-            .unwrap_or_default();
-            Ok(to_pay)
-        }
-    }
+#[derive(SimpleObject, Debug)]
+pub struct OwedInGroup {
+    pub group_id: String,
+    pub amount: i64,
 }

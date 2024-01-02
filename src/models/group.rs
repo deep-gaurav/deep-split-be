@@ -1,9 +1,15 @@
-use async_graphql::{Context, Object};
+use anyhow::Ok;
+use async_graphql::{Context, Object, SimpleObject};
 use sqlx::SqlitePool;
+use uuid::Uuid;
 
 use crate::{auth::AuthTypes, schema::get_pool_from_context};
 
-use super::{expense::Expense, user::User};
+use super::{
+    expense::Expense,
+    split::{Split, TransactionType},
+    user::User,
+};
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct Group {
@@ -11,6 +17,12 @@ pub struct Group {
     pub name: Option<String>,
     pub created_at: String,
     pub creator_id: String,
+}
+
+#[derive(SimpleObject)]
+pub struct GroupMember {
+    pub member: User,
+    pub owed_in_group: i64,
 }
 
 #[Object]
@@ -30,9 +42,14 @@ impl Group {
         User::get_from_id(&self.creator_id, pool).await
     }
 
-    pub async fn members<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<User>> {
+    pub async fn members<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<GroupMember>> {
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
-        self.get_users(pool).await
+        self.get_group_members(&user.id, pool).await
     }
 
     pub async fn expenses<'ctx>(
@@ -45,7 +62,7 @@ impl Group {
         self.get_expenses(skip, limit, pool).await
     }
 
-    pub async fn to_pay<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
+    pub async fn owed<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
         let user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
@@ -55,48 +72,25 @@ impl Group {
 
         let to_pay = sqlx::query!(
             "
-            SELECT SUM(split_transactions.amount-split_transactions.amount_settled) as to_pay FROM 
-            split_transactions
-            JOIN expenses ON expenses.id=split_transactions.expense_id
-            JOIN groups ON groups.id = expenses.group_id
+            SELECT SUM(net_owed_amount) AS total_net_owed_amount
+            FROM (
+                SELECT 
+                    SUM(CASE WHEN from_user = $1 THEN amount ELSE -amount END) AS net_owed_amount
+                FROM 
+                    split_transactions
+                WHERE 
+                    (from_user = $1 OR to_user = $1)
+                    AND group_id = $2
+            ) AS subquery_alias;
 
-            WHERE groups.id = $1 AND split_transactions.from_user = $2
         ",
+            user.id,
             self.id,
-            user.id
         )
         .fetch_one(pool)
         .await?
-        .to_pay
-        .unwrap_or_default();
-        Ok(to_pay)
-    }
-
-    pub async fn to_receive<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
-        let user = context
-            .data::<AuthTypes>()
-            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
-            .as_authorized_user()
-            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
-        let pool = get_pool_from_context(context).await?;
-
-        let to_pay = sqlx::query!(
-            "
-            SELECT SUM(split_transactions.amount-split_transactions.amount_settled) as to_pay FROM 
-            split_transactions
-            JOIN expenses ON expenses.id=split_transactions.expense_id
-            JOIN groups ON groups.id = expenses.group_id
-
-            WHERE groups.id = $1 AND split_transactions.to_user = $2
-        ",
-            self.id,
-            user.id
-        )
-        .fetch_one(pool)
-        .await?
-        .to_pay
-        .unwrap_or_default();
-        Ok(to_pay)
+        .total_net_owed_amount;
+        Ok(to_pay.unwrap_or_default() as i64)
     }
 }
 
@@ -116,16 +110,13 @@ impl Group {
 
         log::info!("User Count {users_count}");
         let query_string = r##"
-            
         SELECT g.*
         FROM groups g
-        INNER JOIN group_memberships gm ON g.id = gm.group_id
-        WHERE gm.user_id IN ({QUERY_IN}) 
-        AND g.name IS NULL
+        JOIN group_memberships gm ON g.id = gm.group_id
+        WHERE g.name IS NULL AND gm.user_id IN ({QUERY_IN})
         GROUP BY g.id
         HAVING COUNT(DISTINCT gm.user_id) = ${END_BIND}
-        AND COUNT(*) = ${END_BIND}
-
+        AND COUNT(DISTINCT gm.user_id) = (SELECT COUNT(*) FROM users WHERE id IN ({QUERY_IN}))
         "##
         .replace("{QUERY_IN}", &in_string)
         .replace("{END_BIND}", (users.len() + 1).to_string().as_str());
@@ -212,6 +203,52 @@ impl Group {
         Ok(users)
     }
 
+    pub async fn get_group_members(
+        &self,
+        user_id: &str,
+        pool: &SqlitePool,
+    ) -> anyhow::Result<Vec<GroupMember>> {
+        let users = sqlx::query!(
+            r#"
+        SELECT 
+            u.id AS user_id,
+            u.name AS user_name,
+            u.phone AS user_phone,
+            u.email AS user_email,
+            u.notification_token AS user_notification_token,
+            SUM(CASE WHEN st.from_user = $1 AND st.to_user = u.id THEN st.amount ELSE 0 END) - 
+            SUM(CASE WHEN st.to_user = $1 AND st.from_user = u.id THEN st.amount ELSE 0 END) AS owed_amount
+        FROM 
+            group_memberships m
+        INNER JOIN 
+            split_transactions st ON m.group_id = st.group_id
+        INNER JOIN 
+            users u ON u.id = m.user_id
+        WHERE 
+            m.group_id = $2
+        GROUP BY 
+            u.id, u.name, u.phone, u.email, u.notification_token;
+            "#,
+            user_id,
+            self.id
+        )
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(|record| GroupMember {
+            member: User {
+                id: record.user_id,
+                name: record.user_name,
+                phone: record.user_phone,
+                email: record.user_email,
+                notification_token: record.user_notification_token,
+            },
+            owed_in_group: record.owed_amount as i64,
+        })
+        .collect();
+        Ok(users)
+    }
+
     pub async fn get_expenses(
         &self,
         skip: u32,
@@ -230,5 +267,60 @@ impl Group {
         .fetch_all(pool)
         .await?;
         Ok(expenses)
+    }
+
+    pub async fn settle_for_group<'a>(
+        group_id: &str,
+        from_user: &str,
+        to_user: &str,
+        amount: i64,
+        creator_id: &str,
+        part_transaction: Option<String>,
+        transaction_type: TransactionType,
+        transaction: &mut sqlx::Transaction<'a, sqlx::Sqlite>,
+    ) -> anyhow::Result<Split> {
+        let id = Uuid::new_v4().to_string();
+        let time = chrono::Utc::now().to_rfc3339();
+        let ttype = transaction_type.to_string();
+        let split = sqlx::query_as!(
+            Split,
+            "
+            INSERT INTO split_transactions(
+                id,
+                amount,
+                from_user,
+                to_user,
+                transaction_type,
+                part_transaction,
+                created_at,
+                created_by,
+                group_id
+            )
+            VALUES (
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                $6,
+                $7,
+                $8,
+                $9
+            )
+             RETURNING * 
+            ",
+            id,
+            amount,
+            from_user,
+            to_user,
+            ttype,
+            part_transaction,
+            time,
+            creator_id,
+            group_id
+        )
+        .fetch_one(transaction.as_mut())
+        .await?;
+        Ok(split)
     }
 }

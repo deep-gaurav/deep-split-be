@@ -32,6 +32,7 @@ uuid = { version = "1", features = ["v4", "fast-rng"] }
 chrono = "0.4.24"
 rand = "0.8.5"
 futures = "0.3.30"
+strum = { version = "0.25.0", features = ["derive"] }
 
 [profile.dev.package.sqlx-macros]
 opt-level = 3

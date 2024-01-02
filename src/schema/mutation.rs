@@ -8,7 +8,12 @@ use crate::{
     auth::{create_tokens, decode_refresh_token, AuthResult, AuthTypes, UserSignedUp},
     email::{send_email_invite, send_email_otp},
     expire_map::ExpiringHashMap,
-    models::{expense::Expense, group::Group, user::User},
+    models::{
+        expense::Expense,
+        group::Group,
+        split::{Split, TransactionType},
+        user::User,
+    },
 };
 
 use super::get_pool_from_context;
@@ -345,41 +350,238 @@ impl Mutation {
         }
     }
 
-    pub async fn settle_expense<'ctx>(
+    pub async fn settle_in_group<'ctx>(
         &self,
         context: &Context<'ctx>,
-        expense_id: String,
+        to_user: String,
+        group_id: String,
         amount: i64,
-    ) -> anyhow::Result<Expense> {
-        let _user = context
+    ) -> anyhow::Result<Split> {
+        let self_user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
             .as_authorized_user()
-            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+            .ok_or(anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
-
-        Expense::settle_expense(&expense_id, &_user.id, amount, pool).await?;
-        let expense = Expense::get_from_id(&expense_id, pool).await?;
-
-        Ok(expense)
+        let group = Group::get_from_id(&group_id, pool).await?;
+        let members = group.get_users(pool).await?;
+        if !members.iter().any(|user| user.id == to_user)
+            || !members.iter().any(|user| user.id == self_user.id)
+        {
+            return Err(anyhow::anyhow!("Cant settle to non members"));
+        }
+        let mut transaction = pool.begin().await?;
+        let split = Group::settle_for_group(
+            &group_id,
+            &to_user,
+            &self_user.id,
+            amount,
+            &self_user.id,
+            None,
+            TransactionType::CashPaid,
+            &mut transaction,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(split)
     }
 
-    pub async fn settle_user<'ctx>(
+    pub async fn simplify_cross_group<'ctx>(
         &self,
         context: &Context<'ctx>,
-        user_id: String,
-        amount: i64,
-    ) -> anyhow::Result<&str> {
-        let _user = context
+        with_user: String,
+    ) -> anyhow::Result<Vec<Split>> {
+        let self_user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
             .as_authorized_user()
-            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+            .ok_or(anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
+        let owes = User::get_owes_with_group(&self_user.id, &with_user, pool).await?;
+        let positives = owes.iter().filter(|ow| ow.amount > 0);
+        let mut negatives = owes.iter().filter(|ow| ow.amount < 0);
+        let mut transaction = pool.begin().await?;
+        let mut negative = negatives.next();
+        let mut negative_settled = 0_i64;
+        let part_id = uuid::Uuid::new_v4().to_string();
+        let mut splits = vec![];
+        'po: for positive in positives {
+            log::info!("Positive: {positive:?}");
+            let mut remaining_positive = positive.amount;
+            while let Some(negative_val) = negative.or_else(|| negatives.next()) {
+                negative = Some(negative_val);
+                log::info!("Negative: {negative:?}");
+                let remaining_negative = negative_val.amount.abs() - negative_settled;
+                if remaining_negative > 0 {
+                    let (amt_settle, is_neg) = if remaining_negative > remaining_positive {
+                        negative_settled += remaining_positive;
+                        (remaining_positive, true)
+                    } else {
+                        remaining_positive -= remaining_negative;
+                        (remaining_negative, false)
+                    };
+                    log::info!("Amount settle {amt_settle} is_neg {is_neg}");
+                    splits.push(
+                        Group::settle_for_group(
+                            &positive.group_id,
+                            &self_user.id,
+                            &with_user,
+                            amt_settle,
+                            &self_user.id,
+                            Some(part_id.clone()),
+                            TransactionType::CrossGroupSettlement,
+                            &mut transaction,
+                        )
+                        .await?,
+                    );
+                    splits.push(
+                        Group::settle_for_group(
+                            &negative_val.group_id,
+                            &with_user,
+                            &self_user.id,
+                            amt_settle,
+                            &self_user.id,
+                            Some(part_id.clone()),
+                            TransactionType::CrossGroupSettlement,
+                            &mut transaction,
+                        )
+                        .await?,
+                    );
+                    if is_neg {
+                        continue 'po;
+                    }
+                }
+                negative = None;
+                negative_settled = 0;
+                log::info!("Next!")
+            }
+        }
 
-        _user.settle_expense(&user_id, amount, pool).await?;
-        Ok("success")
+        transaction.commit().await?;
+
+        Ok(splits)
     }
+
+    pub async fn auto_settle_with_user<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        with_user: String,
+        amount: i64,
+    ) -> anyhow::Result<Vec<Split>> {
+        let self_user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or(anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+        let mut owes = User::get_owes_with_group(&with_user, &self_user.id, pool).await?;
+        owes.sort_by(|a, b| b.amount.cmp(&a.amount));
+        let mut remaining_amount = amount;
+        let mut splits = vec![];
+        let part_id = uuid::Uuid::new_v4().to_string();
+
+        let mut transaction = pool.begin().await?;
+        for owed in owes.iter() {
+            if remaining_amount <= 0 {
+                break;
+            }
+            log::info!("Owed {owed:?}");
+            if owed.amount > 0 {
+                let to_pay = owed.amount.min(remaining_amount);
+                remaining_amount -= to_pay;
+                splits.push(
+                    Group::settle_for_group(
+                        &owed.group_id,
+                        &with_user,
+                        &self_user.id,
+                        to_pay,
+                        &self_user.id,
+                        Some(part_id.clone()),
+                        TransactionType::CashPaid,
+                        &mut transaction,
+                    )
+                    .await?,
+                )
+            }
+        }
+        transaction.commit().await?;
+
+        if remaining_amount > 0 {
+            let user_ids = vec![self_user.id.clone(), with_user.clone()];
+            let group = match Group::find_group_for_users(user_ids.clone(), pool).await {
+                Ok(gid) => {
+                    log::info!("Found existing group {gid:?}");
+                    gid
+                }
+                Err(err) => {
+                    log::info!("Not found existing group {err:?}");
+                    let id = uuid::Uuid::new_v4().to_string();
+                    let group = Group::create_group(&id, &self_user.id, None, pool).await?;
+                    let futures = FuturesUnordered::new();
+                    for user_id in user_ids.iter() {
+                        futures.push(Group::add_to_group(&group.id, user_id.as_str(), pool))
+                    }
+                    let result = futures.collect::<Vec<_>>().await;
+                    if let Some(err) = result.iter().find(|v| v.is_err()) {
+                        return Err(anyhow::anyhow!("Cannot add everyone to group {err:?}"));
+                    }
+                    group
+                }
+            };
+            let mut transaction = pool.begin().await?;
+            splits.push(
+                Group::settle_for_group(
+                    &group.id,
+                    &with_user,
+                    &self_user.id,
+                    remaining_amount,
+                    &self_user.id,
+                    Some(part_id.clone()),
+                    TransactionType::CashPaid,
+                    &mut transaction,
+                )
+                .await?,
+            );
+            transaction.commit().await?;
+        }
+        Ok(splits)
+    }
+
+    // pub async fn settle_expense<'ctx>(
+    //     &self,
+    //     context: &Context<'ctx>,
+    //     expense_id: String,
+    //     amount: i64,
+    // ) -> anyhow::Result<Expense> {
+    //     let _user = context
+    //         .data::<AuthTypes>()
+    //         .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+    //         .as_authorized_user()
+    //         .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+    //     let pool = get_pool_from_context(context).await?;
+
+    //     Expense::settle_expense(&expense_id, &_user.id, amount, pool).await?;
+    //     let expense = Expense::get_from_id(&expense_id, pool).await?;
+
+    //     Ok(expense)
+    // }
+
+    //     pub async fn settle_user<'ctx>(
+    //         &self,
+    //         context: &Context<'ctx>,
+    //         user_id: String,
+    //         amount: i64,
+    //     ) -> anyhow::Result<&str> {
+    //         let _user = context
+    //             .data::<AuthTypes>()
+    //             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+    //             .as_authorized_user()
+    //             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+    //         let pool = get_pool_from_context(context).await?;
+
+    //         _user.settle_expense(&user_id, amount, pool).await?;
+    //         Ok("success")
+    //     }
 }
 
 #[derive(InputObject)]

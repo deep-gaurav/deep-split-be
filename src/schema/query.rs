@@ -145,6 +145,37 @@ impl Query {
             Err(anyhow::anyhow!("No User with given email"))
         }
     }
+
+    pub async fn overall_owed<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+        let to_pay = sqlx::query!(
+            "
+            SELECT SUM(net_owed_amount) as total_net_owed_amount FROM (
+                SELECT 
+                    from_user,
+                    to_user,
+                    SUM(CASE WHEN from_user = $1 THEN amount ELSE -amount END) AS net_owed_amount
+                FROM 
+                    split_transactions
+                WHERE 
+                    (from_user = $1) OR 
+                    (to_user = $1)
+                GROUP BY 
+                    from_user, to_user
+            )
+        ",
+            user.id
+        )
+        .fetch_one(pool)
+        .await?
+        .total_net_owed_amount;
+        Ok(to_pay.unwrap_or_default())
+    }
 }
 
 impl Query {
@@ -179,7 +210,7 @@ impl Query {
         let expenses = sqlx::query_as!(
             Expense,
             r#"
-SELECT e.id, e.title, e.created_at, e.created_by, e.group_id, e.amount
+SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount
 FROM expenses e
 JOIN split_transactions s ON e.id = s.expense_id
 WHERE (s.from_user = $1 AND s.to_user = $2)
