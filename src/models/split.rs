@@ -31,9 +31,7 @@ impl Split {
         match &self.expense_id {
             Some(expense_id) => {
                 let pool: &sqlx::Pool<sqlx::Sqlite> = get_pool_from_context(context).await?;
-                Expense::get_from_id(&expense_id, pool)
-                    .await
-                    .map(|expense| Some(expense))
+                Expense::get_from_id(expense_id, pool).await.map(Some)
             }
             None => Ok(None),
         }

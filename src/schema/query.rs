@@ -3,7 +3,7 @@ use sqlx::SqlitePool;
 
 use crate::{
     auth::AuthTypes,
-    models::{expense::Expense, group::Group, user::User},
+    models::{expense::Expense, group::Group, split::Split, user::User},
 };
 
 use super::get_pool_from_context;
@@ -175,6 +175,36 @@ impl Query {
         .await?
         .total_net_owed_amount;
         Ok(to_pay.unwrap_or_default())
+    }
+
+    pub async fn get_transactions_with_user<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        with_user: String,
+        skip: u32,
+        limit: u32,
+    ) -> anyhow::Result<Vec<Split>> {
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+        let splits = sqlx::query_as!(
+            Split,
+            "
+            SELECT * from split_transactions WHERE
+            (from_user = $1 AND to_user = $2) OR (from_user = $2 AND to_user = $1)
+            ORDER BY created_at DESC LIMIT $3 OFFSET $4
+            ",
+            user.id,
+            with_user,
+            limit,
+            skip
+        )
+        .fetch_all(pool)
+        .await?;
+        Ok(splits)
     }
 }
 
