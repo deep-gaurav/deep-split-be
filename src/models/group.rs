@@ -208,6 +208,7 @@ impl Group {
         user_id: &str,
         pool: &SqlitePool,
     ) -> anyhow::Result<Vec<GroupMember>> {
+        let orig_users = self.get_users(pool).await?;
         let users = sqlx::query!(
             r#"
         SELECT 
@@ -245,8 +246,20 @@ impl Group {
             },
             owed_in_group: record.owed_amount as i64,
         })
-        .collect();
-        Ok(users)
+        .collect::<Vec<_>>();
+        let users_combined = orig_users
+            .into_iter()
+            .map(|u| GroupMember {
+                owed_in_group: users
+                    .iter()
+                    .find(|u2| u2.member.id == u.id)
+                    .map(|u| u.owed_in_group)
+                    .unwrap_or_default(),
+                member: u,
+            })
+            .collect();
+
+        Ok(users_combined)
     }
 
     pub async fn get_expenses(
