@@ -68,6 +68,10 @@ impl Split {
         let pool = get_pool_from_context(context).await?;
         User::get_from_id(&self.created_by, pool).await
     }
+
+    pub async fn transaction_part_group_id(&self) -> Option<String> {
+        self.part_transaction.clone()
+    }
 }
 
 impl Split {
