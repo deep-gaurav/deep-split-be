@@ -56,8 +56,8 @@ impl Split {
         User::get_from_id(&self.to_user, pool).await
     }
 
-    pub async fn is_settlement(&self) -> TransactionType {
-        self.transaction_type()
+    pub async fn transaction_type(&self) -> TransactionType {
+        self.get_transaction_type()
     }
 
     pub async fn created_at(&self) -> &str {
@@ -71,7 +71,7 @@ impl Split {
 }
 
 impl Split {
-    pub fn transaction_type(&self) -> TransactionType {
+    pub fn get_transaction_type(&self) -> TransactionType {
         TransactionType::from_str(&self.transaction_type).unwrap_or(TransactionType::CashPaid)
     }
 }
