@@ -85,6 +85,19 @@ impl Split {
     pub async fn transaction_part_group_id(&self) -> Option<String> {
         self.part_transaction.clone()
     }
+
+    pub async fn with_group<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Option<Group>> {
+        let pool = get_pool_from_context(context).await?;
+        if let Some(group_id) = &self.with_group_id {
+            Ok(Some(Group::get_from_id(group_id, pool).await?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn with_group_id(&self) -> Option<String> {
+        self.with_group_id.clone()
+    }
 }
 
 impl Split {
