@@ -40,6 +40,10 @@ impl Expense {
         User::get_from_id(&self.created_by, pool).await
     }
 
+    pub async fn creator_id(&self) -> &str {
+        &self.created_by
+    }
+
     pub async fn group<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Group> {
         let pool = get_pool_from_context(context).await?;
         Group::get_from_id(&self.group_id, pool).await

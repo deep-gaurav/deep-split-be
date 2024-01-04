@@ -70,6 +70,18 @@ impl Split {
         User::get_from_id(&self.created_by, pool).await
     }
 
+    pub async fn creator_id(&self) -> &str {
+        &self.created_by
+    }
+
+    pub async fn to_user_id(&self) -> &str {
+        &self.to_user
+    }
+
+    pub async fn from_user_id(&self) -> &str {
+        &self.from_user
+    }
+
     pub async fn transaction_part_group_id(&self) -> Option<String> {
         self.part_transaction.clone()
     }
