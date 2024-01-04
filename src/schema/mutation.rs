@@ -380,6 +380,7 @@ impl Mutation {
             None,
             TransactionType::CashPaid,
             &mut transaction,
+            None,
         )
         .await?;
         transaction.commit().await?;
@@ -431,6 +432,7 @@ impl Mutation {
                             Some(part_id.clone()),
                             TransactionType::CrossGroupSettlement,
                             &mut transaction,
+                            Some(negative_val.group_id.clone()),
                         )
                         .await?,
                     );
@@ -444,6 +446,7 @@ impl Mutation {
                             Some(part_id.clone()),
                             TransactionType::CrossGroupSettlement,
                             &mut transaction,
+                            Some(positive.group_id.clone()),
                         )
                         .await?,
                     );
@@ -499,6 +502,7 @@ impl Mutation {
                         Some(part_id.clone()),
                         TransactionType::CashPaid,
                         &mut transaction,
+                        None,
                     )
                     .await?,
                 )
@@ -539,6 +543,7 @@ impl Mutation {
                     Some(part_id.clone()),
                     TransactionType::CashPaid,
                     &mut transaction,
+                    None,
                 )
                 .await?,
             );

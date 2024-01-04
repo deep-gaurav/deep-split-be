@@ -304,6 +304,7 @@ impl Group {
         part_transaction: Option<String>,
         transaction_type: TransactionType,
         transaction: &mut sqlx::Transaction<'a, sqlx::Sqlite>,
+        with_group_id: Option<String>,
     ) -> anyhow::Result<Split> {
         let id = Uuid::new_v4().to_string();
         let time = chrono::Utc::now().to_rfc3339();
@@ -320,7 +321,8 @@ impl Group {
                 part_transaction,
                 created_at,
                 created_by,
-                group_id
+                group_id,
+                with_group_id
             )
             VALUES (
                 $1,
@@ -331,7 +333,8 @@ impl Group {
                 $6,
                 $7,
                 $8,
-                $9
+                $9,
+                $10
             )
              RETURNING * 
             ",
@@ -343,7 +346,8 @@ impl Group {
             part_transaction,
             time,
             creator_id,
-            group_id
+            group_id,
+            with_group_id
         )
         .fetch_one(transaction.as_mut())
         .await?;

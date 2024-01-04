@@ -19,6 +19,7 @@ pub struct Split {
     pub part_transaction: Option<String>,
     pub created_at: String,
     pub created_by: String,
+    pub with_group_id: Option<String>,
 }
 
 #[Object]

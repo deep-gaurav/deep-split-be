@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS split_transactions (
   created_at TEXT NOT NULL,
   created_by TEXT NOT NULL,
   group_id TEXT NOT NULL,
+  with_group_id TEXT,
 
   CONSTRAINT fk_from_user
     FOREIGN KEY(from_user) 
@@ -87,6 +88,11 @@ CREATE TABLE IF NOT EXISTS split_transactions (
 
   CONSTRAINT fk_group
     FOREIGN KEY(group_id) 
+	  REFERENCES groups(id) DEFERRABLE INITIALLY DEFERRED
+
+
+  CONSTRAINT fk_with_group
+    FOREIGN KEY(with_group_id) 
 	  REFERENCES groups(id) DEFERRABLE INITIALLY DEFERRED
 );
 

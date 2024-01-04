@@ -300,6 +300,7 @@ impl Query {
                         st.created_at AS split_transaction_created_at,
                         st.created_by AS split_transaction_created_by,
                         st.group_id AS split_transaction_group_id,
+                        st.with_group_id AS split_transaction_with_group_id,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -321,6 +322,7 @@ impl Query {
                         st.created_at AS split_transaction_created_at,
                         st.created_by AS split_transaction_created_by,
                         st.group_id AS split_transaction_group_id,
+                        st.with_group_id AS split_transaction_with_group_id,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -379,6 +381,8 @@ impl Query {
                             transaction_type:row.split_transaction_transaction_type.unwrap(),
                             created_at:row.split_transaction_created_at.unwrap(),
                             created_by: row.split_transaction_created_by.unwrap(),
+                            with_group_id: row.split_transaction_with_group_id,
+
                         })
                     }else{
                         None
@@ -400,6 +404,7 @@ impl Query {
                         st.created_at AS split_transaction_created_at,
                         st.created_by AS split_transaction_created_by,
                         st.group_id AS split_transaction_group_id,
+                        st.with_group_id AS split_transaction_with_group_id,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -421,6 +426,7 @@ impl Query {
                         st.created_at AS split_transaction_created_at,
                         st.created_by AS split_transaction_created_by,
                         st.group_id AS split_transaction_group_id,
+                        st.with_group_id AS split_transaction_with_group_id,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -477,6 +483,7 @@ impl Query {
                             transaction_type:row.split_transaction_transaction_type.unwrap(),
                             created_at:row.split_transaction_created_at.unwrap(),
                             created_by: row.split_transaction_created_by.unwrap(),
+                            with_group_id: row.split_transaction_with_group_id,
                         })
                     }else{
                         None
