@@ -55,11 +55,11 @@ impl Group {
     pub async fn expenses<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(default = 0)] skip: u32,
+        from_time: Option<String>,
         #[graphql(default = 10)] limit: u32,
     ) -> anyhow::Result<Vec<Expense>> {
         let pool = get_pool_from_context(context).await?;
-        self.get_expenses(skip, limit, pool).await
+        self.get_expenses(limit, from_time, pool).await
     }
 
     pub async fn owed<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
@@ -264,21 +264,34 @@ impl Group {
 
     pub async fn get_expenses(
         &self,
-        skip: u32,
         limit: u32,
+        from_time: Option<String>,
         pool: &SqlitePool,
     ) -> anyhow::Result<Vec<Expense>> {
-        let expenses = sqlx::query_as!(
-            Expense,
-            r#"SELECT 
-            id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!" 
-            FROM expenses where group_id=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"#,
-            self.id,
-            limit,
-            skip
-        )
-        .fetch_all(pool)
-        .await?;
+        let expenses = if let Some(from_time) = from_time {
+            sqlx::query_as!(
+                Expense,
+                r#"SELECT 
+                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!" 
+                FROM expenses where group_id=$1 AND created_at<$3 ORDER BY created_at DESC LIMIT $2"#,
+                self.id,
+                limit,
+                from_time
+            )
+            .fetch_all(pool)
+            .await?
+        } else {
+            sqlx::query_as!(
+                Expense,
+                r#"SELECT 
+                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!" 
+                FROM expenses where group_id=$1 ORDER BY created_at DESC LIMIT $2"#,
+                self.id,
+                limit,
+            )
+            .fetch_all(pool)
+            .await?
+        };
         Ok(expenses)
     }
 

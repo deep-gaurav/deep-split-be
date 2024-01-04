@@ -71,22 +71,22 @@ impl Query {
         Ok(user)
     }
 
-    pub async fn expenses_with_user<'ctx>(
-        &self,
-        context: &Context<'ctx>,
-        user_id: String,
-        #[graphql(default = 0)] skip: u32,
-        #[graphql(default = 10)] limit: u32,
-    ) -> anyhow::Result<Vec<Expense>> {
-        let auth_type = context
-            .data::<AuthTypes>()
-            .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
-        let user = auth_type
-            .as_authorized_user()
-            .ok_or(anyhow::anyhow!("Unauthorized"))?;
-        let pool = get_pool_from_context(context).await?;
-        Self::get_expenses_with_user(&user.id, &user_id, skip, limit, pool).await
-    }
+    // pub async fn expenses_with_user<'ctx>(
+    //     &self,
+    //     context: &Context<'ctx>,
+    //     user_id: String,
+    //     #[graphql(default = 0)] skip: u32,
+    //     #[graphql(default = 10)] limit: u32,
+    // ) -> anyhow::Result<Vec<Expense>> {
+    //     let auth_type = context
+    //         .data::<AuthTypes>()
+    //         .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
+    //     let user = auth_type
+    //         .as_authorized_user()
+    //         .ok_or(anyhow::anyhow!("Unauthorized"))?;
+    //     let pool = get_pool_from_context(context).await?;
+    //     Self::get_expenses_with_user(&user.id, &user_id, skip, limit, pool).await
+    // }
 
     pub async fn interacted_users<'a>(&self, context: &Context<'a>) -> anyhow::Result<Vec<User>> {
         let _user = context
@@ -181,7 +181,7 @@ impl Query {
         &self,
         context: &Context<'ctx>,
         with_user: String,
-        skip: u32,
+        from_time: Option<String>,
         limit: u32,
     ) -> anyhow::Result<Vec<Split>> {
         let user = context
@@ -190,70 +190,156 @@ impl Query {
             .as_authorized_user()
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
-        let splits = sqlx::query_as!(
-            Split,
-            "
-            SELECT * from split_transactions WHERE
-            (from_user = $1 AND to_user = $2) OR (from_user = $2 AND to_user = $1)
-            ORDER BY created_at DESC LIMIT $3 OFFSET $4
-            ",
-            user.id,
-            with_user,
-            limit,
-            skip
-        )
-        .fetch_all(pool)
-        .await?;
+        let splits = if let Some(from_tile) = from_time {
+            sqlx::query_as!(
+                Split,
+                "
+                SELECT * from split_transactions WHERE
+                ((from_user = $1 AND to_user = $2) OR (from_user = $2 AND to_user = $1))
+                AND created_at < $4
+                ORDER BY created_at DESC LIMIT $3
+                ",
+                user.id,
+                with_user,
+                limit,
+                from_tile
+            )
+            .fetch_all(pool)
+            .await?
+        } else {
+            sqlx::query_as!(
+                Split,
+                "
+                SELECT * from split_transactions WHERE
+                (from_user = $1 AND to_user = $2) OR (from_user = $2 AND to_user = $1)
+                ORDER BY created_at DESC LIMIT $3
+                ",
+                user.id,
+                with_user,
+                limit,
+            )
+            .fetch_all(pool)
+            .await?
+        };
+        Ok(splits)
+    }
+
+    pub async fn get_transactions_with_group<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        with_group: String,
+        from_time: Option<String>,
+        limit: u32,
+    ) -> anyhow::Result<Vec<Split>> {
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+        let splits = if let Some(from_tile) = from_time {
+            sqlx::query_as!(
+                Split,
+                "
+                SELECT * from split_transactions WHERE
+                (from_user = $1  OR to_user = $1)
+                AND group_id = $2
+                AND created_at < $4
+                ORDER BY created_at DESC LIMIT $3
+                ",
+                user.id,
+                with_group,
+                limit,
+                from_tile
+            )
+            .fetch_all(pool)
+            .await?
+        } else {
+            sqlx::query_as!(
+                Split,
+                "
+                SELECT * from split_transactions WHERE
+                (from_user = $1  OR to_user = $1)
+                AND group_id = $2
+                ORDER BY created_at DESC LIMIT $3
+                ",
+                user.id,
+                with_group,
+                limit,
+            )
+            .fetch_all(pool)
+            .await?
+        };
         Ok(splits)
     }
 }
 
 impl Query {
-    pub async fn get_expenses_by_creator(
-        &self,
-        user_id: &str,
-        skip: u32,
-        limit: u32,
-        pool: &SqlitePool,
-    ) -> anyhow::Result<Vec<Expense>> {
-        let expenses = sqlx::query_as!(
-            Expense,
-            r#"SELECT 
-            id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!" 
-            FROM expenses where created_by=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"#,
-            user_id,
-            limit,
-            skip
-        )
-        .fetch_all(pool)
-        .await?;
-        Ok(expenses)
-    }
+    // pub async fn get_expenses_by_creator(
+    //     &self,
+    //     user_id: &str,
+    //     skip: u32,
+    //     limit: u32,
+    //     pool: &SqlitePool,
+    // ) -> anyhow::Result<Vec<Expense>> {
+    //     let expenses = sqlx::query_as!(
+    //         Expense,
+    //         r#"SELECT
+    //         id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!"
+    //         FROM expenses where created_by=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"#,
+    //         user_id,
+    //         limit,
+    //         skip
+    //     )
+    //     .fetch_all(pool)
+    //     .await?;
+    //     Ok(expenses)
+    // }
 
     pub async fn get_expenses_with_user(
         user_1: &str,
         user_2: &str,
-        skip: u32,
+        from_time: Option<String>,
         limit: u32,
         pool: &SqlitePool,
     ) -> anyhow::Result<Vec<Expense>> {
-        let expenses = sqlx::query_as!(
-            Expense,
-            r#"
-SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount
-FROM expenses e
-JOIN split_transactions s ON e.id = s.expense_id
-WHERE (s.from_user = $1 AND s.to_user = $2)
-OR (s.from_user = $2 AND s.to_user = $1)
-ORDER BY created_at DESC LIMIT $3 OFFSET $4
-            "#,
-            user_1,
-            user_2,
-            limit,
-            skip
-        )
-        .fetch_all(pool)
-        .await?;
+        let expenses = if let Some(from_time) = from_time {
+            sqlx::query_as!(
+                Expense,
+                r#"
+    SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount
+    FROM expenses e
+    JOIN split_transactions s ON e.id = s.expense_id
+    WHERE ((s.from_user = $1 AND s.to_user = $2)
+    OR (s.from_user = $2 AND s.to_user = $1))
+    AND s.created_at < $4
+    ORDER BY created_at DESC LIMIT $3
+                "#,
+                user_1,
+                user_2,
+                limit,
+                from_time
+            )
+            .fetch_all(pool)
+            .await?
+        } else {
+            sqlx::query_as!(
+                Expense,
+                r#"
+    SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount
+    FROM expenses e
+    JOIN split_transactions s ON e.id = s.expense_id
+    WHERE (s.from_user = $1 AND s.to_user = $2)
+    OR (s.from_user = $2 AND s.to_user = $1)
+    ORDER BY created_at DESC LIMIT $3
+                "#,
+                user_1,
+                user_2,
+                limit,
+            )
+            .fetch_all(pool)
+            .await?
+        };
         Ok(expenses)
     }
 }
