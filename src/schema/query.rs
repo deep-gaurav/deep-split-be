@@ -272,6 +272,223 @@ impl Query {
         };
         Ok(splits)
     }
+
+    pub async fn get_transactions_mix_expense_with_group<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        with_group: String,
+        from_time: Option<String>,
+        limit: u32,
+    ) -> anyhow::Result<Vec<ExpenseMixSplit>> {
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+        let splits = if let Some(from_tile) = from_time {
+            sqlx::query!(
+                r#"
+                WITH expenses_left_join AS (
+                    SELECT
+                        st.id AS split_transaction_id,
+                        st.amount AS split_transaction_amount,
+                        st.from_user as split_transaction_from_user,
+                        st.to_user as split_transaction_to_user,
+                        st.transaction_type as split_transaction_transaction_type,
+                        st.part_transaction as split_transaction_part_transaction,
+                        st.created_at AS split_transaction_created_at,
+                        st.created_by AS split_transaction_created_by,
+                        st.group_id AS split_transaction_group_id,
+                        e.id AS expense_id,
+                        e.title as expense_title,
+                        e.created_at as expense_created_at,
+                        e.created_by as expense_created_by,
+                        e.group_id as expense_group_id,
+                        e.amount as expense_amount
+                    FROM expenses e
+                    LEFT JOIN split_transactions st ON st.expense_id = e.id AND (st.to_user = $1 OR st.from_user = $1)
+                    WHERE e.group_id = $2
+                    ),
+                    split_transactions_right_join AS (
+                    SELECT
+                        st.id AS split_transaction_id,
+                        st.amount AS split_transaction_amount,
+                        st.from_user as split_transaction_from_user,
+                        st.to_user as split_transaction_to_user,
+                        st.transaction_type as split_transaction_transaction_type,
+                        st.part_transaction as split_transaction_part_transaction,
+                        st.created_at AS split_transaction_created_at,
+                        st.created_by AS split_transaction_created_by,
+                        st.group_id AS split_transaction_group_id,
+                        e.id AS expense_id,
+                        e.title as expense_title,
+                        e.created_at as expense_created_at,
+                        e.created_by as expense_created_by,
+                        e.group_id as expense_group_id,
+                        e.amount as expense_amount
+                    FROM split_transactions st
+                    LEFT JOIN expenses e ON st.expense_id = e.id
+                    WHERE st.to_user = $1 OR st.from_user = $1
+                        AND st.group_id = $2
+                    )
+                    
+                    SELECT *
+                    FROM (
+                      SELECT *
+                      FROM expenses_left_join
+                      UNION ALL
+                      SELECT *
+                      FROM split_transactions_right_join
+                      WHERE expense_id IS NULL
+                    )
+                    WHERE COALESCE(expense_created_at, split_transaction_created_at) < $4  
+                    ORDER BY COALESCE(expense_created_at, split_transaction_created_at) DESC
+                    LIMIT $3            
+                "#,
+                user.id,
+                with_group,
+                limit,
+                from_tile
+            )
+            .fetch_all(pool)
+            .await?
+            .into_iter()
+            .map(|row|{
+                    let expense = if let Some(expense_id)=row.expense_id.clone(){
+                        Some(Expense{
+                            id: expense_id,
+                            title: row.expense_title.unwrap(),
+                            created_at: row.expense_created_at.unwrap(),
+                            created_by: row.expense_created_by.unwrap(),
+                            group_id: row.expense_group_id.unwrap(),
+                            amount: row.expense_amount.unwrap(),
+                        })
+                    }else{
+                        None
+                    };
+                    let split = if let Some(split_id)=row.split_transaction_id{
+                        Some(Split{
+                            id:split_id,
+                            amount:row.split_transaction_amount.unwrap(),
+                            expense_id:row.expense_id,
+                            group_id:row.split_transaction_group_id.unwrap(),
+                            from_user: row.split_transaction_from_user.unwrap(),
+                            to_user: row.split_transaction_to_user.unwrap(),
+                            part_transaction: row.split_transaction_part_transaction,
+                            transaction_type:row.split_transaction_transaction_type.unwrap(),
+                            created_at:row.split_transaction_created_at.unwrap(),
+                            created_by: row.split_transaction_created_by.unwrap(),
+                        })
+                    }else{
+                        None
+                    };
+                    ExpenseMixSplit { expense, split}
+                }
+            ).collect()
+        } else {
+            sqlx::query!(
+                r#"
+                WITH expenses_left_join AS (
+                    SELECT
+                        st.id AS split_transaction_id,
+                        st.amount AS split_transaction_amount,
+                        st.from_user as split_transaction_from_user,
+                        st.to_user as split_transaction_to_user,
+                        st.transaction_type as split_transaction_transaction_type,
+                        st.part_transaction as split_transaction_part_transaction,
+                        st.created_at AS split_transaction_created_at,
+                        st.created_by AS split_transaction_created_by,
+                        st.group_id AS split_transaction_group_id,
+                        e.id AS expense_id,
+                        e.title as expense_title,
+                        e.created_at as expense_created_at,
+                        e.created_by as expense_created_by,
+                        e.group_id as expense_group_id,
+                        e.amount as expense_amount
+                    FROM expenses e
+                    LEFT JOIN split_transactions st ON st.expense_id = e.id AND (st.to_user = $1 OR st.from_user = $1)
+                    WHERE e.group_id = $2
+                    ),
+                    split_transactions_right_join AS (
+                    SELECT
+                        st.id AS split_transaction_id,
+                        st.amount AS split_transaction_amount,
+                        st.from_user as split_transaction_from_user,
+                        st.to_user as split_transaction_to_user,
+                        st.transaction_type as split_transaction_transaction_type,
+                        st.part_transaction as split_transaction_part_transaction,
+                        st.created_at AS split_transaction_created_at,
+                        st.created_by AS split_transaction_created_by,
+                        st.group_id AS split_transaction_group_id,
+                        e.id AS expense_id,
+                        e.title as expense_title,
+                        e.created_at as expense_created_at,
+                        e.created_by as expense_created_by,
+                        e.group_id as expense_group_id,
+                        e.amount as expense_amount
+                    FROM split_transactions st
+                    LEFT JOIN expenses e ON st.expense_id = e.id
+                    WHERE st.to_user = $1 OR st.from_user = $1
+                        AND st.group_id = $2
+                    )
+                    
+                    SELECT *
+                    FROM (
+                      SELECT *
+                      FROM expenses_left_join
+                      UNION ALL
+                      SELECT *
+                      FROM split_transactions_right_join
+                      WHERE expense_id IS NULL
+                    )
+                    ORDER BY COALESCE(expense_created_at, split_transaction_created_at) DESC
+                    LIMIT $3            
+                "#,
+                user.id,
+                with_group,
+                limit,
+            )
+            .fetch_all(pool)
+            .await?
+            .into_iter()
+            .map(|row|{
+                    let expense = if let Some(expense_id)=row.expense_id.clone(){
+                        Some(Expense{
+                            id: expense_id,
+                            title: row.expense_title.unwrap(),
+                            created_at: row.expense_created_at.unwrap(),
+                            created_by: row.expense_created_by.unwrap(),
+                            group_id: row.expense_group_id.unwrap(),
+                            amount: row.expense_amount.unwrap(),
+                        })
+                    }else{
+                        None
+                    };
+                    let split = if let Some(split_id)=row.split_transaction_id{
+                        Some(Split{
+                            id:split_id,
+                            amount:row.split_transaction_amount.unwrap(),
+                            expense_id:row.expense_id,
+                            group_id:row.split_transaction_group_id.unwrap(),
+                            from_user: row.split_transaction_from_user.unwrap(),
+                            to_user: row.split_transaction_to_user.unwrap(),
+                            part_transaction: row.split_transaction_part_transaction,
+                            transaction_type:row.split_transaction_transaction_type.unwrap(),
+                            created_at:row.split_transaction_created_at.unwrap(),
+                            created_by: row.split_transaction_created_by.unwrap(),
+                        })
+                    }else{
+                        None
+                    };
+                    ExpenseMixSplit { expense, split}
+
+                }
+            ).collect()
+        };
+
+        Ok(splits)
+    }
 }
 
 impl Query {
@@ -359,4 +576,10 @@ pub struct Unregistered {
 #[derive(SimpleObject)]
 pub struct Registered<'a> {
     pub user: &'a User,
+}
+
+#[derive(SimpleObject)]
+pub struct ExpenseMixSplit {
+    pub expense: Option<Expense>,
+    pub split: Option<Split>,
 }
