@@ -38,6 +38,10 @@ impl Split {
         }
     }
 
+    pub async fn expense_id(&self) -> Option<String> {
+        self.expense_id.clone()
+    }
+
     pub async fn group<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Group> {
         let pool = get_pool_from_context(context).await?;
         Group::get_from_id(&self.group_id, pool).await
