@@ -43,6 +43,10 @@ impl Split {
         Group::get_from_id(&self.group_id, pool).await
     }
 
+    pub async fn group_id(&self) -> &str {
+        &self.group_id
+    }
+
     pub async fn amount(&self) -> i64 {
         self.amount
     }
