@@ -435,7 +435,7 @@ impl Query {
                         e.amount as expense_amount
                     FROM split_transactions st
                     LEFT JOIN expenses e ON st.expense_id = e.id
-                    WHERE st.to_user = $1 OR st.from_user = $1
+                    WHERE (st.to_user = $1 OR st.from_user = $1)
                         AND st.group_id = $2
                     )
                     
