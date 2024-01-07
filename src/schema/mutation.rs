@@ -341,7 +341,21 @@ impl Mutation {
                 if splits.iter().any(|split| split.user_id == _user.id) {
                     return Err(anyhow::anyhow!("Cant split to self"));
                 }
+                if amount <= 0 {
+                    return Err(anyhow::anyhow!("Amount must be greater than 0"));
+                }
                 let pool = get_pool_from_context(context).await?;
+                let splits = splits
+                    .into_iter()
+                    .filter(|f| f.amount > 0)
+                    .collect::<Vec<_>>();
+                let group_members = Group::get_users(&group_id, pool).await?;
+                if !splits
+                    .iter()
+                    .all(|s| group_members.iter().any(|user| user.id == s.user_id))
+                {
+                    return Err(anyhow::anyhow!("Not everyone is group member"));
+                }
                 let expense =
                     Expense::new_expense(&_user.id, &title, &group_id, amount, splits, pool)
                         .await?;
@@ -363,8 +377,7 @@ impl Mutation {
             .as_authorized_user()
             .ok_or(anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
-        let group = Group::get_from_id(&group_id, pool).await?;
-        let members = group.get_users(pool).await?;
+        let members = Group::get_users(&group_id, pool).await?;
         if !members.iter().any(|user| user.id == to_user)
             || !members.iter().any(|user| user.id == self_user.id)
         {

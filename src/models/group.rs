@@ -188,7 +188,7 @@ impl Group {
         Ok(())
     }
 
-    pub async fn get_users(&self, pool: &SqlitePool) -> anyhow::Result<Vec<User>> {
+    pub async fn get_users(group_id: &str, pool: &SqlitePool) -> anyhow::Result<Vec<User>> {
         let users = sqlx::query_as!(
             User,
             r#"
@@ -196,7 +196,7 @@ impl Group {
                 users JOIN group_memberships ON users.id=group_memberships.user_id 
                 JOIN groups ON group_memberships.group_id=groups.id AND groups.id=$1
             "#,
-            self.id
+            group_id
         )
         .fetch_all(pool)
         .await?;
@@ -208,7 +208,7 @@ impl Group {
         user_id: &str,
         pool: &SqlitePool,
     ) -> anyhow::Result<Vec<GroupMember>> {
-        let orig_users = self.get_users(pool).await?;
+        let orig_users = Self::get_users(&self.id, pool).await?;
         let users = sqlx::query!(
             r#"
         SELECT 

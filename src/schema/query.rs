@@ -42,7 +42,7 @@ impl Query {
                 let group = Group::get_from_id(&id, pool)
                     .await
                     .map_err(|_e| anyhow::anyhow!("Group not found"))?;
-                let users = group.get_users(pool).await?;
+                let users = Group::get_users(&group.id, pool).await?;
                 if users.iter().any(|u| u.id == user.id) {
                     Ok(group)
                 } else {
