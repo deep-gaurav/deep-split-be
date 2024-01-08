@@ -69,18 +69,6 @@ pub async fn send_email_otp(to_email: &str, otp: &str) -> anyhow::Result<()> {
 </body>
 </html>
                 "##.replace("{{{PASSCODE}}}", otp)
-            },
-
-            EmailContent{
-                mime:"text/plain".to_string(),
-                value: r##"Hello There,
-
-Your One-Time Passcode for Bill Divide Signup/Login : {{{PASSCODE}}}
-Passcode is valid for 5 minutes
-
-Regards,
-Bill Divide
-"##.replace("{{{PASSCODE}}}", otp)
             }
 
         ],
@@ -92,7 +80,8 @@ Bill Divide
         .send()
         .await?;
     if !request.status().is_success() {
-        Err(anyhow::anyhow!("Cant send email"))
+        let err = request.text().await;
+        Err(anyhow::anyhow!("Cant send email {err:?}"))
     } else {
         Ok(())
     }
@@ -144,18 +133,6 @@ pub async fn send_email_invite(to_email: &str, inviter: &str) -> anyhow::Result<
 </html>        
                 "##.replace("[INVITER_NAME]", inviter)
             },
-            EmailContent{
-                mime:"text/plain".to_string(),
-                value: r##"Hello There!
-
-You've been invited by [INVITER_NAME] to join Bill Divide, a convenient app to share expenses seamlessly with friends.
-Follow the below link to start dividing bills with ease!
-https://billdivide.app/
-
-Regards,
-Bill Divide
-"##.replace("[INVITER_NAME]", inviter)
-            }
         ],
     };
     let request = REQWEST_CLIENT
