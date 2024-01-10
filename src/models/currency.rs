@@ -7,6 +7,7 @@ pub struct Currency {
     pub display_name: String,
     pub rate: f64,
     pub symbol: String,
+    pub decimals: i64,
 }
 
 impl Currency {

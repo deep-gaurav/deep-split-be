@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS currency (
   id TEXT PRIMARY KEY NOT NULL,
   display_name TEXT NOT NULL,
   symbol TEXT NOT NULL,
-  rate REAL NOT NULL
+  rate REAL NOT NULL,
+  decimals INT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS group_memberships (
