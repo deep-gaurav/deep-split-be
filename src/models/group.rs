@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::Ok;
 use async_graphql::{Context, Object, SimpleObject};
 use sqlx::SqlitePool;
@@ -6,6 +8,7 @@ use uuid::Uuid;
 use crate::{auth::AuthTypes, schema::get_pool_from_context};
 
 use super::{
+    amount::Amount,
     expense::Expense,
     split::{Split, TransactionType},
     user::User,
@@ -22,7 +25,7 @@ pub struct Group {
 #[derive(SimpleObject)]
 pub struct GroupMember {
     pub member: User,
-    pub owed_in_group: i64,
+    pub owed_in_group: Vec<Amount>,
 }
 
 #[Object]
@@ -178,7 +181,8 @@ impl Group {
         pool: &SqlitePool,
     ) -> anyhow::Result<Vec<GroupMember>> {
         let orig_users = Self::get_users(&self.id, pool).await?;
-        let users = sqlx::query!(
+        let mut grouped = HashMap::new();
+        sqlx::query!(
             r#"
         SELECT 
             u.id AS user_id,
@@ -186,6 +190,7 @@ impl Group {
             u.phone AS user_phone,
             u.email AS user_email,
             u.notification_token AS user_notification_token,
+            st.currency_id AS currency,
             SUM(CASE WHEN st.from_user = $1 AND st.to_user = u.id THEN st.amount ELSE 0 END) - 
             SUM(CASE WHEN st.to_user = $1 AND st.from_user = u.id THEN st.amount ELSE 0 END) AS owed_amount
         FROM 
@@ -197,7 +202,7 @@ impl Group {
         WHERE 
             m.group_id = $2
         GROUP BY 
-            u.id, u.name, u.phone, u.email, u.notification_token;
+            u.id, u.name, u.phone, u.email, u.notification_token, st.currency_id;
             "#,
             user_id,
             self.id
@@ -205,24 +210,25 @@ impl Group {
         .fetch_all(pool)
         .await?
         .into_iter()
-        .map(|record| GroupMember {
-            member: User {
+        .for_each( |record| {
+            grouped.entry(record.user_id.clone()).or_insert_with(||(User {
                 id: record.user_id,
                 name: record.user_name,
                 phone: record.user_phone,
                 email: record.user_email,
                 notification_token: record.user_notification_token,
-            },
-            owed_in_group: record.owed_amount as i64,
-        })
-        .collect::<Vec<_>>();
+            },Vec::new()))
+            .1.push(Amount{
+                amount:record.owed_amount as i64,
+                currency_id:record.currency,
+            })
+        });
         let users_combined = orig_users
             .into_iter()
             .map(|u| GroupMember {
-                owed_in_group: users
-                    .iter()
-                    .find(|u2| u2.member.id == u.id)
-                    .map(|u| u.owed_in_group)
+                owed_in_group: grouped
+                    .get(u.id.as_str())
+                    .map(|val| val.1.clone())
                     .unwrap_or_default(),
                 member: u,
             })
