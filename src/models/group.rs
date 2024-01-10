@@ -61,37 +61,6 @@ impl Group {
         let pool = get_pool_from_context(context).await?;
         self.get_expenses(limit, from_time, pool).await
     }
-
-    pub async fn owed<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
-        let user = context
-            .data::<AuthTypes>()
-            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
-            .as_authorized_user()
-            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
-        let pool = get_pool_from_context(context).await?;
-
-        let to_pay = sqlx::query!(
-            "
-            SELECT SUM(net_owed_amount) AS total_net_owed_amount
-            FROM (
-                SELECT 
-                    SUM(CASE WHEN from_user = $1 THEN amount ELSE -amount END) AS net_owed_amount
-                FROM 
-                    split_transactions
-                WHERE 
-                    (from_user = $1 OR to_user = $1)
-                    AND group_id = $2
-            ) AS subquery_alias;
-
-        ",
-            user.id,
-            self.id,
-        )
-        .fetch_one(pool)
-        .await?
-        .total_net_owed_amount;
-        Ok(to_pay.unwrap_or_default() as i64)
-    }
 }
 
 impl Group {
@@ -272,7 +241,7 @@ impl Group {
             sqlx::query_as!(
                 Expense,
                 r#"SELECT 
-                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!" 
+                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!", currency_id as "currency_id!" 
                 FROM expenses where group_id=$1 AND created_at<$3 ORDER BY created_at DESC LIMIT $2"#,
                 self.id,
                 limit,
@@ -284,7 +253,7 @@ impl Group {
             sqlx::query_as!(
                 Expense,
                 r#"SELECT 
-                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!" 
+                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!", currency_id as "currency_id!" 
                 FROM expenses where group_id=$1 ORDER BY created_at DESC LIMIT $2"#,
                 self.id,
                 limit,
@@ -305,6 +274,7 @@ impl Group {
         transaction_type: TransactionType,
         transaction: &mut sqlx::Transaction<'a, sqlx::Sqlite>,
         with_group_id: Option<String>,
+        currency_id: &str,
     ) -> anyhow::Result<Split> {
         let id = Uuid::new_v4().to_string();
         let time = chrono::Utc::now().to_rfc3339();
@@ -322,7 +292,8 @@ impl Group {
                 created_at,
                 created_by,
                 group_id,
-                with_group_id
+                with_group_id,
+                currency_id
             )
             VALUES (
                 $1,
@@ -334,7 +305,8 @@ impl Group {
                 $7,
                 $8,
                 $9,
-                $10
+                $10,
+                $11
             )
              RETURNING * 
             ",
@@ -347,7 +319,8 @@ impl Group {
             time,
             creator_id,
             group_id,
-            with_group_id
+            with_group_id,
+            currency_id
         )
         .fetch_one(transaction.as_mut())
         .await?;

@@ -3,7 +3,10 @@ use sqlx::SqlitePool;
 
 use crate::{
     auth::AuthTypes,
-    models::{expense::Expense, group::Group, split::Split, user::User},
+    models::{
+        amount::Amount, currency::Currency, expense::Expense, group::Group, split::Split,
+        user::User,
+    },
 };
 
 use super::get_pool_from_context;
@@ -146,19 +149,21 @@ impl Query {
         }
     }
 
-    pub async fn overall_owed<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<i64> {
+    pub async fn overall_owed<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<Amount>> {
         let user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
             .as_authorized_user()
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
-        let to_pay = sqlx::query!(
+        let to_pay = sqlx::query_as!(
+            Amount,
             "
-            SELECT SUM(net_owed_amount) as total_net_owed_amount FROM (
+            SELECT currency_id,SUM(net_owed_amount) as amount FROM (
                 SELECT 
                     from_user,
                     to_user,
+                    currency_id,
                     SUM(CASE WHEN from_user = $1 THEN amount ELSE -amount END) AS net_owed_amount
                 FROM 
                     split_transactions
@@ -166,15 +171,14 @@ impl Query {
                     (from_user = $1) OR 
                     (to_user = $1)
                 GROUP BY 
-                    from_user, to_user
-            )
+                    from_user, to_user, currency_id
+            ) GROUP BY currency_id
         ",
             user.id
         )
-        .fetch_one(pool)
-        .await?
-        .total_net_owed_amount;
-        Ok(to_pay.unwrap_or_default())
+        .fetch_all(pool)
+        .await?;
+        Ok(to_pay)
     }
 
     pub async fn get_transactions_with_user<'ctx>(
@@ -222,6 +226,11 @@ impl Query {
             .await?
         };
         Ok(splits)
+    }
+
+    pub async fn currencies<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<Currency>> {
+        let pool = get_pool_from_context(context).await?;
+        Currency::get_all(pool).await
     }
 
     pub async fn get_transactions_with_group<'ctx>(
@@ -301,18 +310,20 @@ impl Query {
                         st.created_by AS split_transaction_created_by,
                         st.group_id AS split_transaction_group_id,
                         st.with_group_id AS split_transaction_with_group_id,
+                        st.currency_id AS split_transaction_currency_id,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
                         e.created_by as expense_created_by,
                         e.group_id as expense_group_id,
-                        e.amount as expense_amount
+                        e.amount as expense_amount,
+                        e.currency_id as expense_currency_id
                     FROM expenses e
                     LEFT JOIN split_transactions st ON st.expense_id = e.id AND (st.to_user = $1 OR st.from_user = $1)
                     WHERE e.group_id = $2
                     ),
                     split_transactions_right_join AS (
-                    SELECT
+                        SELECT
                         st.id AS split_transaction_id,
                         st.amount AS split_transaction_amount,
                         st.from_user as split_transaction_from_user,
@@ -323,12 +334,14 @@ impl Query {
                         st.created_by AS split_transaction_created_by,
                         st.group_id AS split_transaction_group_id,
                         st.with_group_id AS split_transaction_with_group_id,
+                        st.currency_id AS split_transaction_currency_id,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
                         e.created_by as expense_created_by,
                         e.group_id as expense_group_id,
-                        e.amount as expense_amount
+                        e.amount as expense_amount,
+                        e.currency_id as expense_currency_id
                     FROM split_transactions st
                     LEFT JOIN expenses e ON st.expense_id = e.id
                     WHERE st.to_user = $1 OR st.from_user = $1
@@ -360,6 +373,7 @@ impl Query {
                     let expense = if let Some(expense_id)=row.expense_id.clone(){
                         Some(Expense{
                             id: expense_id,
+                            currency_id: row.expense_currency_id.unwrap(),
                             title: row.expense_title.unwrap(),
                             created_at: row.expense_created_at.unwrap(),
                             created_by: row.expense_created_by.unwrap(),
@@ -372,6 +386,7 @@ impl Query {
                     let split = if let Some(split_id)=row.split_transaction_id{
                         Some(Split{
                             id:split_id,
+                            currency_id: row.split_transaction_currency_id.unwrap(),
                             amount:row.split_transaction_amount.unwrap(),
                             expense_id:row.expense_id,
                             group_id:row.split_transaction_group_id.unwrap(),
@@ -405,12 +420,14 @@ impl Query {
                         st.created_by AS split_transaction_created_by,
                         st.group_id AS split_transaction_group_id,
                         st.with_group_id AS split_transaction_with_group_id,
+                        st.currency_id AS split_transaction_currency_id,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
                         e.created_by as expense_created_by,
                         e.group_id as expense_group_id,
-                        e.amount as expense_amount
+                        e.amount as expense_amount,
+                        e.currency_id as expense_currency_id
                     FROM expenses e
                     LEFT JOIN split_transactions st ON st.expense_id = e.id AND (st.to_user = $1 OR st.from_user = $1)
                     WHERE e.group_id = $2
@@ -427,12 +444,14 @@ impl Query {
                         st.created_by AS split_transaction_created_by,
                         st.group_id AS split_transaction_group_id,
                         st.with_group_id AS split_transaction_with_group_id,
+                        st.currency_id AS split_transaction_currency_id,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
                         e.created_by as expense_created_by,
                         e.group_id as expense_group_id,
-                        e.amount as expense_amount
+                        e.amount as expense_amount,
+                        e.currency_id as expense_currency_id
                     FROM split_transactions st
                     LEFT JOIN expenses e ON st.expense_id = e.id
                     WHERE (st.to_user = $1 OR st.from_user = $1)
@@ -462,6 +481,7 @@ impl Query {
                     let expense = if let Some(expense_id)=row.expense_id.clone(){
                         Some(Expense{
                             id: expense_id,
+                            currency_id: row.expense_currency_id.unwrap(),
                             title: row.expense_title.unwrap(),
                             created_at: row.expense_created_at.unwrap(),
                             created_by: row.expense_created_by.unwrap(),
@@ -475,6 +495,7 @@ impl Query {
                         Some(Split{
                             id:split_id,
                             amount:row.split_transaction_amount.unwrap(),
+                            currency_id: row.split_transaction_currency_id.unwrap(),
                             expense_id:row.expense_id,
                             group_id:row.split_transaction_group_id.unwrap(),
                             from_user: row.split_transaction_from_user.unwrap(),
@@ -531,7 +552,7 @@ impl Query {
             sqlx::query_as!(
                 Expense,
                 r#"
-    SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount
+    SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount, e.currency_id
     FROM expenses e
     JOIN split_transactions s ON e.id = s.expense_id
     WHERE ((s.from_user = $1 AND s.to_user = $2)
@@ -550,7 +571,7 @@ impl Query {
             sqlx::query_as!(
                 Expense,
                 r#"
-    SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount
+    SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount, e.currency_id
     FROM expenses e
     JOIN split_transactions s ON e.id = s.expense_id
     WHERE (s.from_user = $1 AND s.to_user = $2)

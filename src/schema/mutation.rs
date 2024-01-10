@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_graphql::{Context, InputObject, Object, SimpleObject};
 use futures::{stream::FuturesUnordered, StreamExt};
 use rand::Rng;
@@ -9,6 +11,7 @@ use crate::{
     email::{send_email_invite, send_email_otp},
     expire_map::ExpiringHashMap,
     models::{
+        amount::Amount,
         expense::Expense,
         group::Group,
         split::{Split, TransactionType},
@@ -232,6 +235,7 @@ impl Mutation {
         context: &Context<'ctx>,
         title: String,
         amount: i64,
+        currency_id: String,
         splits: Vec<SplitInputNonGroup>,
     ) -> anyhow::Result<NonGroupExpense> {
         let auth_type = context
@@ -316,7 +320,14 @@ impl Mutation {
                     }
                 };
                 let expense = self
-                    .add_expense(context, group.id.to_string(), title, amount, splits)
+                    .add_expense(
+                        context,
+                        group.id.to_string(),
+                        title,
+                        amount,
+                        currency_id,
+                        splits,
+                    )
                     .await?;
                 Ok(NonGroupExpense { group, expense })
             }
@@ -329,6 +340,7 @@ impl Mutation {
         group_id: String,
         title: String,
         amount: i64,
+        currency_id: String,
         splits: Vec<SplitInput>,
     ) -> anyhow::Result<Expense> {
         let auth_type = context
@@ -356,9 +368,18 @@ impl Mutation {
                 {
                     return Err(anyhow::anyhow!("Not everyone is group member"));
                 }
-                let expense =
-                    Expense::new_expense(&_user.id, &title, &group_id, amount, splits, pool)
-                        .await?;
+                let expense = Expense::new_expense(
+                    &_user.id,
+                    &title,
+                    &group_id,
+                    &Amount {
+                        amount,
+                        currency_id,
+                    },
+                    splits,
+                    pool,
+                )
+                .await?;
                 Ok(expense)
             }
         }
@@ -370,6 +391,7 @@ impl Mutation {
         to_user: String,
         group_id: String,
         amount: i64,
+        currency_id: String,
     ) -> anyhow::Result<Split> {
         let self_user = context
             .data::<AuthTypes>()
@@ -394,6 +416,7 @@ impl Mutation {
             TransactionType::CashPaid,
             &mut transaction,
             None,
+            &currency_id,
         )
         .await?;
         transaction.commit().await?;
@@ -412,67 +435,78 @@ impl Mutation {
             .ok_or(anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
         let owes = User::get_owes_with_group(&self_user.id, &with_user, pool).await?;
-        let positives = owes.iter().filter(|ow| ow.amount > 0);
-        let mut negatives = owes.iter().filter(|ow| ow.amount < 0);
+        let mut grouped_positives = HashMap::new();
+        for owe in owes {
+            grouped_positives
+                .entry(owe.amount.currency_id.clone())
+                .or_insert_with(Vec::new)
+                .push((owe.amount.amount, owe.group_id));
+        }
         let mut transaction = pool.begin().await?;
-        let mut negative = negatives.next();
-        let mut negative_settled = 0_i64;
-        let part_id = uuid::Uuid::new_v4().to_string();
         let mut splits = vec![];
-        'po: for positive in positives {
-            log::info!("Positive: {positive:?}");
-            let mut remaining_positive = positive.amount;
-            while let Some(negative_val) = negative.or_else(|| negatives.next()) {
-                negative = Some(negative_val);
-                log::info!("Negative: {negative:?}");
-                let remaining_negative = negative_val.amount.abs() - negative_settled;
-                if remaining_negative > 0 {
-                    let (amt_settle, is_neg) = if remaining_negative > remaining_positive {
-                        negative_settled += remaining_positive;
-                        (remaining_positive, true)
-                    } else {
-                        remaining_positive -= remaining_negative;
-                        (remaining_negative, false)
-                    };
-                    log::info!("Amount settle {amt_settle} is_neg {is_neg}");
-                    splits.push(
-                        Group::settle_for_group(
-                            &positive.group_id,
-                            &self_user.id,
-                            &with_user,
-                            amt_settle,
-                            &self_user.id,
-                            Some(part_id.clone()),
-                            TransactionType::CrossGroupSettlement,
-                            &mut transaction,
-                            Some(negative_val.group_id.clone()),
-                        )
-                        .await?,
-                    );
-                    splits.push(
-                        Group::settle_for_group(
-                            &negative_val.group_id,
-                            &with_user,
-                            &self_user.id,
-                            amt_settle,
-                            &self_user.id,
-                            Some(part_id.clone()),
-                            TransactionType::CrossGroupSettlement,
-                            &mut transaction,
-                            Some(positive.group_id.clone()),
-                        )
-                        .await?,
-                    );
-                    if is_neg {
-                        continue 'po;
+
+        for (currency, owes) in grouped_positives.iter() {
+            let positives = owes.iter().filter(|ow| ow.0 > 0);
+            let mut negatives = owes.iter().filter(|ow| ow.0 < 0);
+            let mut negative = negatives.next();
+            let mut negative_settled = 0_i64;
+            let part_id = uuid::Uuid::new_v4().to_string();
+            'po: for positive in positives {
+                log::info!("Positive: {positive:?}");
+                let mut remaining_positive = positive.0;
+                while let Some(negative_val) = negative.or_else(|| negatives.next()) {
+                    negative = Some(negative_val);
+                    log::info!("Negative: {negative:?}");
+                    let remaining_negative = negative_val.0.abs() - negative_settled;
+                    if remaining_negative > 0 {
+                        let (amt_settle, is_neg) = if remaining_negative > remaining_positive {
+                            negative_settled += remaining_positive;
+                            (remaining_positive, true)
+                        } else {
+                            remaining_positive -= remaining_negative;
+                            (remaining_negative, false)
+                        };
+                        log::info!("Amount settle {amt_settle} is_neg {is_neg}");
+                        splits.push(
+                            Group::settle_for_group(
+                                &positive.1,
+                                &self_user.id,
+                                &with_user,
+                                amt_settle,
+                                &self_user.id,
+                                Some(part_id.clone()),
+                                TransactionType::CrossGroupSettlement,
+                                &mut transaction,
+                                Some(negative_val.1.clone()),
+                                &currency,
+                            )
+                            .await?,
+                        );
+                        splits.push(
+                            Group::settle_for_group(
+                                &negative_val.1,
+                                &with_user,
+                                &self_user.id,
+                                amt_settle,
+                                &self_user.id,
+                                Some(part_id.clone()),
+                                TransactionType::CrossGroupSettlement,
+                                &mut transaction,
+                                Some(positive.1.clone()),
+                                &currency,
+                            )
+                            .await?,
+                        );
+                        if is_neg {
+                            continue 'po;
+                        }
                     }
+                    negative = None;
+                    negative_settled = 0;
+                    log::info!("Next!")
                 }
-                negative = None;
-                negative_settled = 0;
-                log::info!("Next!")
             }
         }
-
         transaction.commit().await?;
 
         Ok(splits)
@@ -483,6 +517,7 @@ impl Mutation {
         context: &Context<'ctx>,
         with_user: String,
         amount: i64,
+        currency_id: String,
     ) -> anyhow::Result<Vec<Split>> {
         let self_user = context
             .data::<AuthTypes>()
@@ -490,8 +525,18 @@ impl Mutation {
             .as_authorized_user()
             .ok_or(anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
-        let mut owes = User::get_owes_with_group(&with_user, &self_user.id, pool).await?;
-        owes.sort_by(|a, b| b.amount.cmp(&a.amount));
+        let mut owes = User::get_owes_with_group(&with_user, &self_user.id, pool)
+            .await?
+            .into_iter()
+            .filter_map(|val| {
+                if val.amount.currency_id == currency_id {
+                    Some((val.group_id, val.amount.amount))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        owes.sort_by(|a, b| b.1.cmp(&a.1));
         let mut remaining_amount = amount;
         let mut splits = vec![];
         let part_id = uuid::Uuid::new_v4().to_string();
@@ -502,12 +547,12 @@ impl Mutation {
                 break;
             }
             log::info!("Owed {owed:?}");
-            if owed.amount > 0 {
-                let to_pay = owed.amount.min(remaining_amount);
+            if owed.1 > 0 {
+                let to_pay = owed.1.min(remaining_amount);
                 remaining_amount -= to_pay;
                 splits.push(
                     Group::settle_for_group(
-                        &owed.group_id,
+                        &owed.0,
                         &with_user,
                         &self_user.id,
                         to_pay,
@@ -516,6 +561,7 @@ impl Mutation {
                         TransactionType::CashPaid,
                         &mut transaction,
                         None,
+                        &currency_id,
                     )
                     .await?,
                 )
@@ -557,6 +603,7 @@ impl Mutation {
                     TransactionType::CashPaid,
                     &mut transaction,
                     None,
+                    &currency_id,
                 )
                 .await?,
             );

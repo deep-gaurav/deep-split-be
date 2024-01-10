@@ -4,6 +4,7 @@ use sqlx::SqlitePool;
 use crate::schema::{get_pool_from_context, mutation::SplitInput};
 
 use super::{
+    amount::Amount,
     group::Group,
     split::{Split, TransactionType},
     user::User,
@@ -19,6 +20,7 @@ pub struct Expense {
     pub group_id: String,
 
     pub amount: i64,
+    pub currency_id: String,
 }
 
 #[Object]
@@ -49,8 +51,11 @@ impl Expense {
         Group::get_from_id(&self.group_id, pool).await
     }
 
-    pub async fn amount(&self) -> i64 {
-        self.amount
+    pub async fn amount(&self) -> Amount {
+        Amount {
+            amount: self.amount,
+            currency_id: self.currency_id.clone(),
+        }
     }
 
     pub async fn splits<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<Split>> {
@@ -65,7 +70,7 @@ impl Expense {
         user_id: &str,
         title: &str,
         group_id: &str,
-        amount: i64,
+        amount: &Amount,
         splits: Vec<SplitInput>,
         pool: &SqlitePool,
     ) -> anyhow::Result<Expense> {
@@ -74,17 +79,18 @@ impl Expense {
         let time = chrono::Utc::now().to_rfc3339();
         let expense = sqlx::query_as!(
             Expense,
-            r#"INSERT INTO expenses(id, title, created_at, created_by, group_id, amount)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            r#"INSERT INTO expenses(id, title, created_at, created_by, group_id, amount, currency_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING
-            id as "id!", title as "title!", created_at as "created_at!", created_by as "created_by!", group_id as "group_id!", amount as "amount!"
+            id as "id!", title as "title!", created_at as "created_at!", created_by as "created_by!", group_id as "group_id!", amount as "amount!", currency_id as "currency_id!"
             "#,
             id,
             title,
             time,
             user_id,
             group_id,
-            amount,
+            amount.amount,
+            amount.currency_id
         ).fetch_one(transaction.as_mut()).await?;
         let ttype = TransactionType::ExpenseSplit.to_string();
 
@@ -92,12 +98,13 @@ impl Expense {
             let id = uuid::Uuid::new_v4().to_string();
 
             let _data = sqlx::query!("
-                INSERT INTO split_transactions(id,expense_id,amount,from_user,to_user,transaction_type,created_at,created_by, group_id)
-                VALUES ($1, $2, $3,$4,$5,$6,$7,$8, $9)
+                INSERT INTO split_transactions(id,expense_id,amount,currency_id,from_user,to_user,transaction_type,created_at,created_by, group_id)
+                VALUES ($1, $2, $3,$4,$5,$6,$7,$8, $9,$10)
             ",
             id,
             expense.id,
             split.amount,
+            amount.currency_id,
             split.user_id,
             user_id,
             ttype,

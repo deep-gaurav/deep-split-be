@@ -3,7 +3,7 @@ use sqlx::SqlitePool;
 
 use crate::{auth::AuthTypes, schema::get_pool_from_context};
 
-use super::group::Group;
+use super::{amount::Amount, group::Group};
 
 #[derive(Debug, Clone)]
 pub struct User {
@@ -129,12 +129,13 @@ impl User {
     ) -> anyhow::Result<Vec<OwedInGroup>> {
         let to_pay = sqlx::query!(
             "
-            SELECT group_id, SUM(net_owed_amount) AS total_net_owed_amount 
+            SELECT group_id, currency_id, SUM(net_owed_amount) AS total_net_owed_amount 
             FROM (
                 SELECT 
                     from_user,
                     to_user,
                     group_id,
+                    currency_id,
                     SUM(CASE WHEN from_user = $1 THEN amount ELSE -amount END) AS net_owed_amount
                 FROM 
                     split_transactions
@@ -142,8 +143,8 @@ impl User {
                     (from_user = $1 AND to_user = $2) OR 
                     (from_user = $2 AND to_user = $1)
                 GROUP BY 
-                    from_user, to_user, group_id
-            ) GROUP BY group_id
+                    from_user, to_user, group_id, currency_id
+            ) GROUP BY group_id, currency_id
             ",
             from_user,
             to_user,
@@ -153,7 +154,10 @@ impl User {
         .into_iter()
         .map(|f| OwedInGroup {
             group_id: f.group_id,
-            amount: f.total_net_owed_amount,
+            amount: Amount {
+                amount: f.total_net_owed_amount,
+                currency_id: f.currency_id,
+            },
         })
         .collect();
         Ok(to_pay)
@@ -341,8 +345,8 @@ impl User {
     }
 }
 
-#[derive(SimpleObject, Debug)]
+#[derive(SimpleObject)]
 pub struct OwedInGroup {
     pub group_id: String,
-    pub amount: i64,
+    pub amount: Amount,
 }

@@ -19,6 +19,14 @@ CREATE TABLE IF NOT EXISTS groups (
 	  REFERENCES users(id) 
 );
 
+
+CREATE TABLE IF NOT EXISTS currency (
+  id TEXT PRIMARY KEY NOT NULL,
+  display_name TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  rate REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS group_memberships (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL,
@@ -44,7 +52,13 @@ CREATE TABLE IF NOT EXISTS expenses (
 
   group_id TEXT NOT NULL,
 
+  currency_id TEXT NOT NULL,
   amount INTEGER NOT NULL, 
+
+
+  CONSTRAINT fk_currency
+    FOREIGN KEY(currency_id)
+    REFERENCES currency(id),
 
   CONSTRAINT fk_user
     FOREIGN KEY(created_by) 
@@ -59,6 +73,7 @@ CREATE TABLE IF NOT EXISTS split_transactions (
   id TEXT PRIMARY KEY NOT NULL,
   expense_id TEXT,
   amount INTEGER NOT NULL,
+  currency_id TEXT NOT NULL,
   from_user TEXT NOT NULL,
   to_user TEXT NOT NULL,
   transaction_type TEXT NOT NULL,
@@ -71,6 +86,10 @@ CREATE TABLE IF NOT EXISTS split_transactions (
   CONSTRAINT fk_from_user
     FOREIGN KEY(from_user) 
 	  REFERENCES users(id) DEFERRABLE INITIALLY DEFERRED,
+
+  CONSTRAINT fk_currency
+    FOREIGN KEY(currency_id)
+    REFERENCES currency(id) DEFERRABLE INITIALLY DEFERRED,
 
   CONSTRAINT fk_to_user
     FOREIGN KEY(to_user) 
@@ -88,7 +107,7 @@ CREATE TABLE IF NOT EXISTS split_transactions (
 
   CONSTRAINT fk_group
     FOREIGN KEY(group_id) 
-	  REFERENCES groups(id) DEFERRABLE INITIALLY DEFERRED
+	  REFERENCES groups(id) DEFERRABLE INITIALLY DEFERRED,
 
 
   CONSTRAINT fk_with_group

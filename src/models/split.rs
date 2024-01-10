@@ -5,7 +5,7 @@ use strum::{Display, EnumString};
 
 use crate::schema::get_pool_from_context;
 
-use super::{expense::Expense, group::Group, user::User};
+use super::{amount::Amount, expense::Expense, group::Group, user::User};
 
 pub struct Split {
     pub id: String,
@@ -13,6 +13,7 @@ pub struct Split {
 
     pub group_id: String,
     pub amount: i64,
+    pub currency_id: String,
     pub from_user: String,
     pub to_user: String,
     pub transaction_type: String,
@@ -51,8 +52,11 @@ impl Split {
         &self.group_id
     }
 
-    pub async fn amount(&self) -> i64 {
-        self.amount
+    pub async fn amount(&self) -> Amount {
+        Amount {
+            amount: self.amount,
+            currency_id: self.currency_id.clone(),
+        }
     }
 
     pub async fn from_user<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<User> {
