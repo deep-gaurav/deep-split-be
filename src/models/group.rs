@@ -71,28 +71,24 @@ impl Group {
         users: Vec<String>,
         pool: &SqlitePool,
     ) -> anyhow::Result<Group> {
-        let users_count = users.len().to_string();
-        // let users = users.join(",");
-
         //TODO: stuck due to https://github.com/launchbadge/sqlx/issues/875
         let in_string = (1..=users.len())
             .map(|i| format!("${}", i))
             .collect::<Vec<_>>()
             .join(", ");
 
-        log::info!("User Count {users_count}");
         let query_string = r##"
-        SELECT g.*
-        FROM groups g
-        JOIN group_memberships gm ON g.id = gm.group_id
-        WHERE g.name IS NULL AND gm.user_id IN ({QUERY_IN})
-        GROUP BY g.id
-        HAVING COUNT(DISTINCT gm.user_id) = ${END_BIND}
-        AND COUNT(DISTINCT gm.user_id) = (SELECT COUNT(*) FROM users WHERE id IN ({QUERY_IN}))
+            SELECT g.*
+            FROM groups g
+            WHERE g.name IS NULL
+            AND NOT EXISTS (
+                SELECT 1
+                FROM group_memberships gm
+                WHERE gm.group_id = g.id
+                AND gm.user_id NOT IN ({QUERY_IN})
+            )
         "##
-        .replace("{QUERY_IN}", &in_string)
-        .replace("{END_BIND}", (users.len() + 1).to_string().as_str());
-        log::info!("Querying {query_string}");
+        .replace("{QUERY_IN}", &in_string);
         let mut query = sqlx::query_as::<_, Group>(&query_string);
         for user in users.iter() {
             query = query.bind(user);
