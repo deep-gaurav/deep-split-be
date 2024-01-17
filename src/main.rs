@@ -57,8 +57,9 @@ async fn main() -> Result<(), ()> {
     dotenvy::dotenv().expect("No env");
     pretty_env_logger::init();
 
+    let asn_filepath = std::env::var("GEO_ASN_COUNTRY_CSV").expect("GEO_ASN_COUNTRY_CSV not var");
     let asn_db = ip2country::AsnDB::default()
-        .load_ipv4(&std::env::var("GEO_ASN_COUNTRY_CSV").expect("GEO_ASN_COUNTRY_CSV not var"))
+        .load_ipv4(&asn_filepath)
         .expect("INVALID ASN");
 
     let pool = SqlitePool::connect(

@@ -798,6 +798,7 @@ dependencies = [
  "http-cache",
  "http-cache-reqwest",
  "ip2country",
+ "iso_currency",
  "jsonwebtoken",
  "log",
  "once_cell",
@@ -1549,6 +1550,25 @@ name = "ipnet"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
+
+[[package]]
+name = "iso_country"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20633e788d3948ea7336861fdb09ec247f5dae4267e8f0743fa97de26c28624d"
+dependencies = [
+ "lazy_static",
+]
+
+[[package]]
+name = "iso_currency"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33f07181be95c82347a07cf4caf43d2acd8a7e8d08ef1db75e10ed5a9aec3c1b"
+dependencies = [
+ "iso_country",
+ "strum",
+]
 
 [[package]]
 name = "itertools"

@@ -519,14 +519,33 @@ impl Query {
         Ok(splits)
     }
 
-    pub async fn country_code<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<String> {
+    pub async fn country_code<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Currency> {
+        let pool = get_pool_from_context(context).await?;
         let header = context
             .data_opt::<ForwardedHeader>()
             .ok_or(anyhow::anyhow!("IP Unknown"))?;
         let asn_db = context
             .data::<AsnDB>()
             .map_err(|e| anyhow::anyhow!("{e:?}"))?;
-        header.determine_country(asn_db)
+        let country_code = header.determine_country(asn_db)?;
+        let iso_country = iso_currency::Country::from_name(&country_code)
+            .ok_or(anyhow::anyhow!("Country unknown"))?;
+        use strum::IntoEnumIterator;
+        for currency in iso_currency::Currency::iter() {
+            if currency
+                .used_by()
+                .iter()
+                .any(|country| country == &iso_country)
+            {
+                let code = currency.code();
+                let currency =
+                    sqlx::query_as!(Currency, "SELECT * from currency where id=$1", code)
+                        .fetch_one(pool)
+                        .await?;
+                return Ok(currency);
+            }
+        }
+        Err(anyhow::anyhow!("Currency could not be determined"))
     }
 }
 
