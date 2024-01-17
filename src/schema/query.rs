@@ -7,8 +7,12 @@ use sqlx::SqlitePool;
 use crate::{
     auth::{AuthTypes, ForwardedHeader},
     models::{
-        amount::Amount, currency::Currency, expense::Expense, group::Group, split::Split,
-        user::User,
+        amount::Amount,
+        currency::Currency,
+        expense::Expense,
+        group::Group,
+        split::Split,
+        user::{User, UserConfig},
     },
 };
 
@@ -521,32 +525,21 @@ impl Query {
         Ok(splits)
     }
 
-    pub async fn country_code<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Currency> {
+    pub async fn config<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<UserConfig> {
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
-        let header = context
-            .data_opt::<ForwardedHeader>()
-            .ok_or(anyhow::anyhow!("IP Unknown"))?;
-        let asn_db = context
-            .data::<AsnDB>()
-            .map_err(|e| anyhow::anyhow!("{e:?}"))?;
-        let country_code = header.determine_country(asn_db)?;
-        let iso_country = iso_currency::Country::from_str(&country_code)?;
-        use strum::IntoEnumIterator;
-        for currency in iso_currency::Currency::iter() {
-            if currency
-                .used_by()
-                .iter()
-                .any(|country| country == &iso_country)
-            {
-                let code = currency.code();
-                let currency =
-                    sqlx::query_as!(Currency, "SELECT * from currency where id=$1", code)
-                        .fetch_one(pool)
-                        .await?;
-                return Ok(currency);
-            }
-        }
-        Err(anyhow::anyhow!("Currency could not be determined"))
+        let config = sqlx::query_as!(
+            UserConfig,
+            "SELECT * From user_config where user_id = $1",
+            user.id
+        )
+        .fetch_one(pool)
+        .await?;
+        Ok(config)
     }
 }
 

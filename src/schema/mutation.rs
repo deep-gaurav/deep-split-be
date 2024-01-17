@@ -2,12 +2,15 @@ use std::collections::HashMap;
 
 use async_graphql::{Context, InputObject, Object, SimpleObject};
 use futures::{stream::FuturesUnordered, StreamExt};
+use ip2country::AsnDB;
 use rand::Rng;
 use sqlx::{Pool, Sqlite};
 use tokio::sync::RwLock;
 
 use crate::{
-    auth::{create_tokens, decode_refresh_token, AuthResult, AuthTypes, UserSignedUp},
+    auth::{
+        create_tokens, decode_refresh_token, AuthResult, AuthTypes, ForwardedHeader, UserSignedUp,
+    },
     email::{send_email_invite, send_email_otp},
     expire_map::ExpiringHashMap,
     models::{
@@ -15,11 +18,11 @@ use crate::{
         expense::Expense,
         group::Group,
         split::{Split, TransactionType},
-        user::User,
+        user::{User, UserConfig},
     },
 };
 
-use super::get_pool_from_context;
+use super::{currency_from_ip, get_pool_from_context};
 
 pub type OtpMap = RwLock<ExpiringHashMap<String, String>>;
 
@@ -133,6 +136,18 @@ impl Mutation {
                     .email
                     .clone()
                     .ok_or(anyhow::anyhow!("Only email is supported now"))?;
+                let currency_id = 'currency: {
+                    let Ok(db) = context.data::<AsnDB>() else {
+                        break 'currency "USD".to_string();
+                    };
+                    let Some(header) = context.data_opt::<ForwardedHeader>() else {
+                        break 'currency "USD".to_string();
+                    };
+                    let Ok(currency) = currency_from_ip(pool, header, db).await else {
+                        break 'currency "USD".to_string();
+                    };
+                    currency.id
+                };
                 let user = match User::get_from_email(&email, pool).await {
                     Ok(user) => User::set_user_name(&user.id, &name, pool).await?,
                     Err(_) => {
@@ -144,6 +159,7 @@ impl Mutation {
                             claims.phone_number.clone(),
                             claims.email.clone(),
                             upi_id,
+                            currency_id,
                             pool,
                         )
                         .await
@@ -610,6 +626,28 @@ impl Mutation {
             transaction.commit().await?;
         }
         Ok(splits)
+    }
+
+    pub async fn set_default_currency<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        currency_id: String,
+    ) -> anyhow::Result<UserConfig> {
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+        let config = sqlx::query_as!(
+            UserConfig,
+            "UPDATE user_config SET default_currency_id=$1 WHERE user_id = $2 RETURNING * ",
+            currency_id,
+            user.id,
+        )
+        .fetch_one(pool)
+        .await?;
+        Ok(config)
     }
 
     // pub async fn settle_expense<'ctx>(

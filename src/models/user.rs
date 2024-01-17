@@ -70,6 +70,7 @@ impl User {
         phone: Option<String>,
         email: Option<String>,
         upi_id: Option<String>,
+        default_currency_id: String,
         pool: &SqlitePool,
     ) -> anyhow::Result<User> {
         let mut transaction = pool.begin().await?;
@@ -82,6 +83,13 @@ impl User {
             email
         )
         .fetch_one(transaction.as_mut())
+        .await?;
+        sqlx::query!(
+            "INSERT INTO user_config(user_id,default_currency_id) VALUES ($1, $2)",
+            user.id,
+            default_currency_id
+        )
+        .execute(transaction.as_mut())
         .await?;
         if let Some(upi_id) = upi_id {
             let id = uuid::Uuid::new_v4().to_string();
@@ -349,4 +357,10 @@ impl User {
 pub struct OwedInGroup {
     pub group_id: String,
     pub amount: Amount,
+}
+
+#[derive(SimpleObject)]
+pub struct UserConfig {
+    pub user_id: String,
+    pub default_currency_id: String,
 }

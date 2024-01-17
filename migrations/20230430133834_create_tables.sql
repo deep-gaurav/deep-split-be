@@ -126,3 +126,16 @@ CREATE TABLE IF NOT EXISTS payment_modes (
     FOREIGN KEY(user_id) 
 	  REFERENCES users(id)
 );
+
+CREATE TABLE IF NOT EXISTS user_config (
+  user_id TEXT PRIMARY KEY NOT NULL,
+  default_currency_id TEXT NOT NULL,
+
+  CONSTRAINT fk_user
+    FOREIGN KEY(user_id) 
+	  REFERENCES users(id),
+
+  CONSTRAINT fk_currency
+    FOREIGN KEY(default_currency_id) 
+	  REFERENCES currency(id)
+);
