@@ -342,9 +342,13 @@ impl Mutation {
                         title,
                         amount,
                         currency_id,
-                        splits,
+                        splits.clone(),
                     )
                     .await?;
+                for user in splits.into_iter() {
+                    let _ = self.simplify_cross_group(context, user.user_id).await;
+                }
+
                 Ok(NonGroupExpense { group, expense })
             }
         }
@@ -392,10 +396,13 @@ impl Mutation {
                         amount,
                         currency_id,
                     },
-                    splits,
+                    splits.clone(),
                     pool,
                 )
                 .await?;
+                for user in splits.into_iter() {
+                    let _ = self.simplify_cross_group(context, user.user_id).await;
+                }
                 Ok(expense)
             }
         }
@@ -436,6 +443,7 @@ impl Mutation {
         )
         .await?;
         transaction.commit().await?;
+        let _ = self.simplify_cross_group(context, to_user).await;
         Ok(split)
     }
 
@@ -625,6 +633,8 @@ impl Mutation {
             );
             transaction.commit().await?;
         }
+        let _ = self.simplify_cross_group(context, with_user).await;
+
         Ok(splits)
     }
 
@@ -687,7 +697,7 @@ impl Mutation {
     //     }
 }
 
-#[derive(InputObject)]
+#[derive(InputObject, Clone)]
 pub struct SplitInput {
     pub amount: i64,
     pub user_id: String,
