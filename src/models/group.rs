@@ -87,8 +87,14 @@ impl Group {
                 WHERE gm.group_id = g.id
                 AND gm.user_id NOT IN ({QUERY_IN})
             )
+            AND (
+                SELECT COUNT(*)
+                FROM group_memberships gm
+                WHERE gm.group_id = g.id
+            ) = ${END_BIND}
         "##
-        .replace("{QUERY_IN}", &in_string);
+        .replace("{QUERY_IN}", &in_string)
+        .replace("{END_BIND}", (users.len() + 1).to_string().as_str());
         let mut query = sqlx::query_as::<_, Group>(&query_string);
         for user in users.iter() {
             query = query.bind(user);
