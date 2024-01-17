@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use async_graphql::{Context, Object, SimpleObject, Union};
 use ip2country::AsnDB;
 use sqlx::SqlitePool;
@@ -528,8 +530,7 @@ impl Query {
             .data::<AsnDB>()
             .map_err(|e| anyhow::anyhow!("{e:?}"))?;
         let country_code = header.determine_country(asn_db)?;
-        let iso_country = iso_currency::Country::from_name(&country_code)
-            .ok_or(anyhow::anyhow!("Country unknown"))?;
+        let iso_country = iso_currency::Country::from_str(&country_code)?;
         use strum::IntoEnumIterator;
         for currency in iso_currency::Currency::iter() {
             if currency
