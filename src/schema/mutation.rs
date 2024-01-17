@@ -149,7 +149,7 @@ impl Mutation {
                     currency.id
                 };
                 let user = match User::get_from_email(&email, pool).await {
-                    Ok(user) => User::set_user_name(&user.id, &name, pool).await?,
+                    Ok(user) => User::set_user_name(&user.id, &name, currency_id, pool).await?,
                     Err(_) => {
                         let id = uuid::Uuid::new_v4().to_string();
 

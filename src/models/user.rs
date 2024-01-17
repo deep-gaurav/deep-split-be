@@ -36,14 +36,28 @@ impl User {
         Ok(user)
     }
 
-    pub async fn set_user_name(id: &str, name: &str, pool: &SqlitePool) -> anyhow::Result<User> {
+    pub async fn set_user_name(
+        id: &str,
+        name: &str,
+        default_currency_id: String,
+        pool: &SqlitePool,
+    ) -> anyhow::Result<User> {
+        let mut transaction = pool.begin().await?;
         let user = sqlx::query_as!(
             User,
             r#"UPDATE users SET name = $2 where id=$1 RETURNING id as "id!", name, phone, email, notification_token"#,
             id,
             name
         )
-        .fetch_one(pool)
+        .fetch_one(transaction.as_mut())
+        .await?;
+
+        sqlx::query!(
+            "INSERT INTO user_config(user_id,default_currency_id) VALUES ($1, $2)",
+            user.id,
+            default_currency_id
+        )
+        .execute(transaction.as_mut())
         .await?;
         Ok(user)
     }
