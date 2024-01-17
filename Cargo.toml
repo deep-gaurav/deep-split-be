@@ -33,6 +33,7 @@ chrono = "0.4.24"
 rand = "0.8.5"
 futures = "0.3.30"
 strum = { version = "0.25.0", features = ["derive"] }
+ip2country = "0.3.0"
 
 [profile.dev.package.sqlx-macros]
 opt-level = 3

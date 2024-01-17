@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use async_graphql::{
     http::{playground_source, GraphQLPlaygroundConfig},
@@ -7,7 +7,7 @@ use async_graphql::{
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::{
     extract::State,
-    http::{Method, StatusCode},
+    http::{HeaderMap, Method, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
     Extension, Router, Server,
@@ -17,6 +17,7 @@ use expire_map::ExpiringHashMap;
 use http_cache::{CACacheManager, CacheMode, HttpCache};
 use http_cache_reqwest::Cache;
 
+use models::currency::Currency;
 use once_cell::sync::Lazy;
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -29,7 +30,7 @@ use sqlx::SqlitePool;
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    auth::{decode_access_token, AuthTypes},
+    auth::{decode_access_token, AuthTypes, ForwardedHeader},
     models::user::User,
 };
 
@@ -56,6 +57,10 @@ async fn main() -> Result<(), ()> {
     dotenvy::dotenv().expect("No env");
     pretty_env_logger::init();
 
+    let asn_db = ip2country::AsnDB::default()
+        .load_ipv4(&std::env::var("GEO_ASN_COUNTRY_CSV").expect("GEO_ASN_COUNTRY_CSV not var"))
+        .expect("INVALID ASN");
+
     let pool = SqlitePool::connect(
         &std::env::var("DATABASE_URL").expect("NO DATABASE_URL in environment"),
     )
@@ -66,6 +71,7 @@ async fn main() -> Result<(), ()> {
 
     let schema = MainSchema::build(Query, Mutation, EmptySubscription)
         .data(otp_map)
+        .data(asn_db)
         .extension(async_graphql::extensions::ApolloTracing)
         .finish();
 
@@ -78,11 +84,18 @@ async fn main() -> Result<(), ()> {
         .route("/playground", get(graphql_playground))
         .route("/", post(graphql_handler))
         // .route("/*path", get(files_handler))
-        .with_state(pool)
+        .with_state(pool.clone())
         .layer(Extension(schema))
         .layer(cors);
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "8000".into());
+
+    let mut currency_update_interval =
+        tokio::time::interval(std::time::Duration::from_secs(60 * 60 * 12));
+    tokio::spawn(async move {
+        currency_update_interval.tick().await;
+        let _ = Currency::fill_currencies(&pool).await;
+    });
     Server::bind(&format!("0.0.0.0:{port}").parse().unwrap())
         .serve(app.into_make_service())
         .await
@@ -96,6 +109,7 @@ async fn graphql_handler(
 
     token: Option<AuthBearer>,
     State(pool): State<SqlitePool>,
+    headers: HeaderMap,
     req: GraphQLRequest,
 ) -> Result<GraphQLResponse, (StatusCode, String)> {
     let mut req = req.into_inner();
@@ -123,6 +137,9 @@ async fn graphql_handler(
     log::debug!("Setting authType {auth_type:#?}");
     req = req.data(auth_type);
     req = req.data(pool);
+    if let Some(forwarded) = headers.get("X-Forwarded-For").and_then(|f| f.to_str().ok()) {
+        req = req.data(ForwardedHeader(forwarded.to_string()));
+    }
 
     // headers.get("Auth")
     Ok(schema.execute(req).await.into())

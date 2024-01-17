@@ -1,8 +1,9 @@
 use async_graphql::{Context, Object, SimpleObject, Union};
+use ip2country::AsnDB;
 use sqlx::SqlitePool;
 
 use crate::{
-    auth::AuthTypes,
+    auth::{AuthTypes, ForwardedHeader},
     models::{
         amount::Amount, currency::Currency, expense::Expense, group::Group, split::Split,
         user::User,
@@ -516,6 +517,16 @@ impl Query {
         };
 
         Ok(splits)
+    }
+
+    pub async fn country_code<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<String> {
+        let header = context
+            .data_opt::<ForwardedHeader>()
+            .ok_or(anyhow::anyhow!("IP Unknown"))?;
+        let asn_db = context
+            .data::<AsnDB>()
+            .map_err(|e| anyhow::anyhow!("{e:?}"))?;
+        header.determine_country(asn_db)
     }
 }
 

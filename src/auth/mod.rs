@@ -1,8 +1,12 @@
+use std::net::{IpAddr, Ipv4Addr};
+
 use async_graphql::{SimpleObject, Union};
 use jsonwebtoken::{DecodingKey, EncodingKey, Validation};
 use serde::{Deserialize, Serialize};
 
 use crate::models::user::User;
+
+pub struct ForwardedHeader(pub String);
 
 #[derive(Debug)]
 pub enum AuthTypes {
@@ -188,5 +192,13 @@ pub fn decode_refresh_token(token: &str) -> anyhow::Result<Claims> {
         Ok(claims.claims)
     } else {
         Err(anyhow::anyhow!("Token is not valid REFRESH_TOKEN"))
+    }
+}
+
+impl ForwardedHeader {
+    pub fn determine_country(&self, db: &ip2country::AsnDB) -> anyhow::Result<String> {
+        let ipv4 = self.0.parse::<Ipv4Addr>()?;
+        let country = db.lookup_ipv4(ipv4).ok_or(anyhow::anyhow!("Unknown ip"))?;
+        Ok(format!("{}{}", country[0], country[1]))
     }
 }
