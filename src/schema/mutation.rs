@@ -773,7 +773,7 @@ impl Mutation {
                         $7,
                         $8,
                         $9,
-                        $11
+                        $10
                     )
                      RETURNING * 
                     ",
@@ -816,7 +816,7 @@ impl Mutation {
                         $7,
                         $8,
                         $9,
-                        $11
+                        $10
                     )
                      RETURNING * 
                     ",
