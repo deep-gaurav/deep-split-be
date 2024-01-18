@@ -123,5 +123,6 @@ impl Split {
 pub enum TransactionType {
     ExpenseSplit,
     CrossGroupSettlement,
+    CurrencyConversion,
     CashPaid,
 }

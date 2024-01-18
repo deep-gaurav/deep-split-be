@@ -289,6 +289,93 @@ impl Query {
         Ok(splits)
     }
 
+    pub async fn get_transactions<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        from_time: Option<String>,
+        limit: u32,
+    ) -> anyhow::Result<Vec<ExpenseMixSplit>> {
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+
+        let rows = sqlx::query!(
+            r#"
+            SELECT 
+                st.id AS transaction_id,
+                st.amount AS transaction_amount,
+                st.currency_id AS transaction_currency,
+                st.from_user,
+                st.to_user,
+                st.transaction_type,
+                st.part_transaction,
+                st.created_at AS transaction_created_at,
+                st.created_by AS transaction_created_by,
+                st.group_id AS transaction_group_id,
+                st.with_group_id,
+                e.id AS expense_id,
+                e.title AS expense_title,
+                e.created_at AS expense_created_at,
+                e.created_by AS expense_created_by,
+                e.group_id AS expense_group_id,
+                e.currency_id AS expense_currency_id,
+                e.amount AS expense_amount
+            FROM 
+                split_transactions st
+            LEFT JOIN 
+                expenses e ON st.expense_id = e.id
+            WHERE 
+                (st.from_user = $1 OR st.to_user = $1)
+                AND (st.created_at <= $2 OR $2 IS NULL)
+            ORDER BY 
+                st.created_at DESC
+            LIMIT 
+                $3;
+            "#,
+            user.id,
+            from_time,
+            limit
+        )
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(|row| ExpenseMixSplit {
+            expense: if row.expense_id.is_some() {
+                Some(Expense {
+                    id: row.expense_id.clone().unwrap(),
+                    title: row.expense_title.unwrap(),
+                    created_at: row.expense_created_at.unwrap(),
+                    created_by: row.expense_created_by.unwrap(),
+                    group_id: row.expense_group_id.unwrap(),
+                    amount: row.expense_amount.unwrap(),
+                    currency_id: row.expense_currency_id.unwrap(),
+                })
+            } else {
+                None
+            },
+            split: Some(Split {
+                id: row.transaction_id,
+                expense_id: row.expense_id,
+                group_id: row.transaction_group_id,
+                amount: row.transaction_amount,
+                currency_id: row.transaction_currency,
+                from_user: row.from_user,
+                to_user: row.to_user,
+                transaction_type: row.transaction_type,
+                part_transaction: row.part_transaction,
+                created_at: row.transaction_created_at,
+                created_by: row.transaction_created_by,
+                with_group_id: row.with_group_id,
+            }),
+        })
+        .collect();
+
+        Ok(rows)
+    }
+
     pub async fn get_transactions_mix_expense_with_group<'ctx>(
         &self,
         context: &Context<'ctx>,

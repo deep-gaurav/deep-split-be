@@ -18,6 +18,12 @@ impl Currency {
             .await?;
         Ok(currencies)
     }
+    pub async fn get_for_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Self> {
+        let currencies = sqlx::query_as!(Currency, "SELECT * FROM currency WHERE id = $1", id)
+            .fetch_one(pool)
+            .await?;
+        Ok(currencies)
+    }
 }
 
 use serde::Deserialize;

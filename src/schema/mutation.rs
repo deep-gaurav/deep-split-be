@@ -15,8 +15,9 @@ use crate::{
     expire_map::ExpiringHashMap,
     models::{
         amount::Amount,
+        currency::Currency,
         expense::Expense,
-        group::Group,
+        group::{self, Group},
         split::{Split, TransactionType},
         user::{User, UserConfig},
     },
@@ -502,7 +503,7 @@ impl Mutation {
                                 TransactionType::CrossGroupSettlement,
                                 &mut transaction,
                                 Some(negative_val.1.clone()),
-                                &currency,
+                                currency,
                             )
                             .await?,
                         );
@@ -517,7 +518,7 @@ impl Mutation {
                                 TransactionType::CrossGroupSettlement,
                                 &mut transaction,
                                 Some(positive.1.clone()),
-                                &currency,
+                                currency,
                             )
                             .await?,
                         );
@@ -658,6 +659,181 @@ impl Mutation {
         .fetch_one(pool)
         .await?;
         Ok(config)
+    }
+
+    pub async fn change_name<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        name: String,
+    ) -> anyhow::Result<User> {
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+        let user = sqlx::query_as!(
+            User,
+            "UPDATE users SET name = $1 WHERE id = $2 RETURNING *",
+            name,
+            user.id
+        )
+        .fetch_one(pool)
+        .await?;
+        Ok(user)
+    }
+
+    pub async fn convert_currency<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        with_user: String,
+        group_id: String,
+        from_currency_id: String,
+        to_currency_id: String,
+    ) -> anyhow::Result<Vec<Split>> {
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+        let owed = sqlx::query!(
+            r"
+                SELECT 
+                    from_user,
+                    to_user,
+                    SUM(CASE WHEN from_user = $1 THEN amount ELSE -amount END) AS net_owed_amount
+                FROM 
+                    split_transactions
+                WHERE 
+                    ((from_user = $1 AND to_user = $2) OR 
+                    (from_user = $2 AND to_user = $1)) 
+                    AND group_id = $3
+                    AND currency_id = $4
+                GROUP BY 
+                    from_user, to_user, group_id, currency_id
+            ",
+            user.id,
+            with_user,
+            group_id,
+            from_currency_id
+        )
+        .fetch_one(pool)
+        .await?
+        .net_owed_amount;
+        match owed.cmp(&0) {
+            std::cmp::Ordering::Equal => Ok(vec![]),
+            std::cmp::Ordering::Greater | std::cmp::Ordering::Less => {
+                let from_currency = Currency::get_for_id(pool, &from_currency_id).await?;
+                let to_currency = Currency::get_for_id(pool, &to_currency_id).await?;
+                let mut transaction = pool.begin().await?;
+                let group_part_id = uuid::Uuid::new_v4().to_string();
+                let time = chrono::Utc::now().to_rfc3339();
+                let rev_id = uuid::Uuid::new_v4().to_string();
+                let forw_id = uuid::Uuid::new_v4().to_string();
+
+                let ttype = TransactionType::CrossGroupSettlement.to_string();
+
+                /// TODO: handle better way fails after 9,007,199,254,740,993
+                /// https://www.reddit.com/r/rust/comments/js1avn/comment/gbxbm2y/?utm_source=share&utm_medium=web2x&context=3
+                let to_amount = ((owed as f64) / from_currency.rate) * to_currency.rate;
+
+                let (from, to) = if owed.cmp(&0) == std::cmp::Ordering::Greater {
+                    (&with_user, &user.id)
+                } else {
+                    (&user.id, &with_user)
+                };
+
+                let rev = sqlx::query_as!(
+                    Split,
+                    r"
+                    INSERT INTO split_transactions(
+                        id,
+                        amount,
+                        from_user,
+                        to_user,
+                        transaction_type,
+                        part_transaction,
+                        created_at,
+                        created_by,
+                        group_id,
+                        currency_id
+                    )
+                    VALUES (
+                        $1,
+                        $2,
+                        $3,
+                        $4,
+                        $5,
+                        $6,
+                        $7,
+                        $8,
+                        $9,
+                        $11
+                    )
+                     RETURNING * 
+                    ",
+                    rev_id,
+                    owed,
+                    from,
+                    to,
+                    ttype,
+                    group_part_id,
+                    time,
+                    user.id,
+                    group_id,
+                    from_currency_id,
+                )
+                .fetch_one(transaction.as_mut())
+                .await?;
+
+                let forw = sqlx::query_as!(
+                    Split,
+                    r"
+                    INSERT INTO split_transactions(
+                        id,
+                        amount,
+                        from_user,
+                        to_user,
+                        transaction_type,
+                        part_transaction,
+                        created_at,
+                        created_by,
+                        group_id,
+                        currency_id
+                    )
+                    VALUES (
+                        $1,
+                        $2,
+                        $3,
+                        $4,
+                        $5,
+                        $6,
+                        $7,
+                        $8,
+                        $9,
+                        $11
+                    )
+                     RETURNING * 
+                    ",
+                    forw_id,
+                    to_amount,
+                    to,
+                    from,
+                    ttype,
+                    group_part_id,
+                    time,
+                    user.id,
+                    group_id,
+                    to_currency_id,
+                )
+                .fetch_one(transaction.as_mut())
+                .await?;
+                transaction.commit().await?;
+                let _ = self.simplify_cross_group(context, with_user).await;
+                Ok(vec![rev, forw])
+            }
+        }
     }
 
     // pub async fn settle_expense<'ctx>(
