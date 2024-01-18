@@ -736,7 +736,11 @@ impl Mutation {
 
                 /// TODO: handle better way fails after 9,007,199,254,740,993
                 /// https://www.reddit.com/r/rust/comments/js1avn/comment/gbxbm2y/?utm_source=share&utm_medium=web2x&context=3
-                let to_amount = ((owed as f64) / from_currency.rate) * to_currency.rate;
+                let to_amount = ((((owed
+                    * 10_i64.pow((to_currency.decimals - from_currency.decimals) as u32))
+                    as f64)
+                    / from_currency.rate)
+                    * to_currency.rate) as i64;
 
                 let (from, to) = if owed.cmp(&0) == std::cmp::Ordering::Greater {
                     (&with_user, &user.id)
