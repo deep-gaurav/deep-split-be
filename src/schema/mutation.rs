@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use async_graphql::{Context, InputObject, Object, SimpleObject};
 use futures::{stream::FuturesUnordered, StreamExt};
 use ip2country::AsnDB;
+use log::debug;
 use rand::Rng;
 use sqlx::{Pool, Sqlite};
 use tokio::sync::RwLock;
@@ -741,11 +742,11 @@ impl Mutation {
                 /// TODO: handle better way fails after 9,007,199,254,740,993
                 /// https://www.reddit.com/r/rust/comments/js1avn/comment/gbxbm2y/?utm_source=share&utm_medium=web2x&context=3
                 let from_amount = owed.abs();
-                let to_amount = ((((owed.abs()
-                    * 10_i64.pow((to_currency.decimals - from_currency.decimals) as u32))
-                    as f64)
-                    / from_currency.rate)
-                    * to_currency.rate) as i64;
+
+                let to_amount = (((owed.abs() as f64)
+                    * 10_f64.powi((to_currency.decimals - from_currency.decimals) as i32))
+                    * from_currency.rate
+                    / to_currency.rate) as i64;
 
                 log::info!("From amount {from_amount} to amount {to_amount}");
                 let (from, to) = if owed.cmp(&0) == std::cmp::Ordering::Greater {
