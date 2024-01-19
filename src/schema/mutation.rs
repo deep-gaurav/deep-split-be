@@ -745,8 +745,8 @@ impl Mutation {
 
                 let to_amount = (((owed.abs() as f64)
                     * 10_f64.powi((to_currency.decimals - from_currency.decimals) as i32))
-                    * from_currency.rate
-                    / to_currency.rate) as i64;
+                    / from_currency.rate
+                    * to_currency.rate) as i64;
 
                 log::info!("From amount {from_amount} to amount {to_amount}");
                 let (from, to) = if owed.cmp(&0) == std::cmp::Ordering::Greater {
