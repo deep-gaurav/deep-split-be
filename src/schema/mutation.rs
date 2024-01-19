@@ -737,7 +737,7 @@ impl Mutation {
                 let rev_id = uuid::Uuid::new_v4().to_string();
                 let forw_id = uuid::Uuid::new_v4().to_string();
 
-                let ttype = TransactionType::CrossGroupSettlement.to_string();
+                let ttype = TransactionType::CurrencyConversion.to_string();
 
                 /// TODO: handle better way fails after 9,007,199,254,740,993
                 /// https://www.reddit.com/r/rust/comments/js1avn/comment/gbxbm2y/?utm_source=share&utm_medium=web2x&context=3
