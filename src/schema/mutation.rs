@@ -699,6 +699,7 @@ impl Mutation {
         let pool = get_pool_from_context(context).await?;
         let owed = sqlx::query!(
             r"
+            SELECT SUM(net_owed_amount) as amount FROM (
                 SELECT 
                     from_user,
                     to_user,
@@ -712,6 +713,7 @@ impl Mutation {
                     AND currency_id = $4
                 GROUP BY 
                     from_user, to_user, group_id, currency_id
+            )
             ",
             user.id,
             with_user,
@@ -720,7 +722,9 @@ impl Mutation {
         )
         .fetch_one(pool)
         .await?
-        .net_owed_amount;
+        .amount
+        .unwrap_or_default();
+        log::info!("OWED Amount {owed}");
         match owed.cmp(&0) {
             std::cmp::Ordering::Equal => Ok(vec![]),
             std::cmp::Ordering::Greater | std::cmp::Ordering::Less => {
@@ -736,12 +740,14 @@ impl Mutation {
 
                 /// TODO: handle better way fails after 9,007,199,254,740,993
                 /// https://www.reddit.com/r/rust/comments/js1avn/comment/gbxbm2y/?utm_source=share&utm_medium=web2x&context=3
+                let from_amount = owed.abs();
                 let to_amount = ((((owed.abs()
                     * 10_i64.pow((to_currency.decimals - from_currency.decimals) as u32))
                     as f64)
                     / from_currency.rate)
                     * to_currency.rate) as i64;
 
+                log::info!("From amount {from_amount} to amount {to_amount}");
                 let (from, to) = if owed.cmp(&0) == std::cmp::Ordering::Greater {
                     (&with_user, &user.id)
                 } else {
@@ -778,7 +784,7 @@ impl Mutation {
                      RETURNING * 
                     ",
                     rev_id,
-                    owed,
+                    from_amount,
                     from,
                     to,
                     ttype,
