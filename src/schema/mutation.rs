@@ -206,6 +206,27 @@ impl Mutation {
         }
     }
 
+    pub async fn set_notification_token<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        token: String,
+    ) -> anyhow::Result<String> {
+        let self_user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or(anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+        sqlx::query!(
+            "UPDATE users SET notification_token = $1 WHERE id = $2",
+            token,
+            self_user.id
+        )
+        .execute(pool)
+        .await?;
+        Ok("success".to_string())
+    }
+
     pub async fn add_to_group_by_email<'ctx>(
         &self,
         context: &Context<'ctx>,
