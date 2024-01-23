@@ -181,7 +181,7 @@ pub async fn send_message_notification(
 
     let body_string = serde_json::to_string(&body).unwrap();
     let response = REQWEST_CLIENT
-        .post("https://fcm.googleapis.com/v1/projects/secret-fire/messages:send")
+        .post("https://fcm.googleapis.com/v1/projects/billdivide-app/messages:send")
         .header("Authorization", format!("Bearer {bearer_token}"))
         .body(body_string)
         .send()
