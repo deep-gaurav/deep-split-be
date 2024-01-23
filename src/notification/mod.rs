@@ -1,12 +1,15 @@
-use serde::{Serialize,Deserialize};
+use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use std::{
     sync::{Arc, RwLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::{REQWEST_CLIENT, FirebaseValues, FIREBASE_VALUES};
+use crate::{FirebaseValues, FIREBASE_VALUES, REQWEST_CLIENT};
 
 static GRANT_TYPE: &'static str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
+
+static BEARER_HOLDER: Lazy<Arc<RwLock<Option<String>>>> = Lazy::new(|| Arc::new(RwLock::new(None)));
 
 pub async fn get_bearer_token() -> Result<String, anyhow::Error> {
     #[derive(Serialize, Deserialize)]
@@ -68,7 +71,6 @@ pub async fn send_message_notification_with_retry(
     full_url: &str,
     description: &str,
     token: &str,
-    bearer: Arc<RwLock<Option<String>>>,
 ) -> Result<(), anyhow::Error> {
     log::info!("Sending notificaion try 1");
     let result = send_message_notification(
@@ -77,7 +79,7 @@ pub async fn send_message_notification_with_retry(
         full_url,
         description,
         token,
-        bearer.clone(),
+        BEARER_HOLDER.clone(),
         true,
     )
     .await;
@@ -86,8 +88,16 @@ pub async fn send_message_notification_with_retry(
     match result {
         Ok(_) => Ok(()),
         Err(_) => {
-            send_message_notification(title, path_url, full_url, description, token, bearer, false)
-                .await
+            send_message_notification(
+                title,
+                path_url,
+                full_url,
+                description,
+                token,
+                BEARER_HOLDER.clone(),
+                false,
+            )
+            .await
         }
     }
 }

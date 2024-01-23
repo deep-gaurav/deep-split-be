@@ -34,14 +34,14 @@ use crate::{
     models::user::User,
 };
 
-use serde::{Serialize,Deserialize};
+use serde::{Deserialize, Serialize};
 
 pub mod auth;
 pub mod email;
 pub mod expire_map;
 pub mod models;
-pub mod schema;
 pub mod notification;
+pub mod schema;
 
 type MainSchema = Schema<Query, Mutation, EmptySubscription>;
 

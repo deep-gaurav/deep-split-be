@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::notification::send_message_notification_with_retry;
 use async_graphql::{Context, InputObject, Object, SimpleObject};
 use futures::{stream::FuturesUnordered, StreamExt};
 use ip2country::AsnDB;
@@ -84,8 +85,8 @@ impl Mutation {
             .data::<OtpMap>()
             .map_err(|_e| anyhow::anyhow!("Something went wrong"))?;
         let correct_otp = 'otp: {
-            if email == "guest@billdivide.app" && &otp == "123456"{
-                break 'otp true
+            if email == "guest@billdivide.app" && &otp == "123456" {
+                break 'otp true;
             };
             let mut otp_map = otp_map.write().await;
             let correct_otp = otp_map.get(&email);
@@ -575,6 +576,7 @@ impl Mutation {
             .as_authorized_user()
             .ok_or(anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
+        let with_user_model = User::get_from_id(&with_user, pool).await?;
         let mut owes = User::get_owes_with_group(&with_user, &self_user.id, pool)
             .await?
             .into_iter()
@@ -660,7 +662,19 @@ impl Mutation {
             transaction.commit().await?;
         }
         let _ = self.simplify_cross_group(context, with_user).await;
-
+        if let Some(token) = with_user_model.notification_token {
+            if let Err(err) = send_message_notification_with_retry(
+                "Someone paid you ",
+                "/",
+                "https://billdivide.app/",
+                "paid you",
+                &token,
+            )
+            .await
+            {
+                log::warn!("Failed to send notification {err:?}")
+            }
+        }
         Ok(splits)
     }
 

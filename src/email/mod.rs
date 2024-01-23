@@ -30,7 +30,7 @@ pub struct EmailContent {
 
 pub async fn send_email_otp(to_email: &str, otp: &str) -> anyhow::Result<()> {
     if to_email == "guest@billdivide.app" {
-        return Ok(())
+        return Ok(());
     }
     let auth_tok = std::env::var("EMAIL_AUTH_TOK")?;
     let email_payload = EmailPayload {
