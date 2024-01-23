@@ -34,11 +34,14 @@ use crate::{
     models::user::User,
 };
 
+use serde::{Serialize,Deserialize};
+
 pub mod auth;
 pub mod email;
 pub mod expire_map;
 pub mod models;
 pub mod schema;
+pub mod notification;
 
 type MainSchema = Schema<Query, Mutation, EmptySubscription>;
 
@@ -51,6 +54,26 @@ static REQWEST_CLIENT: Lazy<ClientWithMiddleware> = Lazy::new(|| {
         }))
         .build()
 });
+
+static FIREBASE_VALUES: Lazy<FirebaseValues> = Lazy::new(|| {
+    let service_json_file = std::env::var("SERVICE_JSON").expect("No SERVICE_JSON defined");
+    let data = std::fs::read_to_string(&service_json_file).unwrap();
+    let data = serde_json::from_str(&data).unwrap();
+    data
+});
+
+#[derive(Serialize, Deserialize)]
+pub struct FirebaseValues {
+    pub project_id: String,
+    pub private_key_id: String,
+    pub private_key: String,
+    pub client_email: String,
+    pub client_id: String,
+    pub auth_uri: String,
+    pub token_uri: String,
+    pub auth_provider_x509_cert_url: String,
+    pub client_x509_cert_url: String,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), ()> {
