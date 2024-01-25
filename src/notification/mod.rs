@@ -71,6 +71,7 @@ pub async fn send_message_notification_with_retry(
     full_url: &str,
     description: &str,
     token: &str,
+    android_channel_id: Option<&str>,
 ) -> Result<(), anyhow::Error> {
     log::info!("Sending notificaion try 1");
     let result = send_message_notification(
@@ -81,6 +82,7 @@ pub async fn send_message_notification_with_retry(
         token,
         BEARER_HOLDER.clone(),
         true,
+        android_channel_id,
     )
     .await;
     log::info!("Sending notificaion try 1 result {result:#?}");
@@ -96,6 +98,7 @@ pub async fn send_message_notification_with_retry(
                 token,
                 BEARER_HOLDER.clone(),
                 false,
+                android_channel_id,
             )
             .await
         }
@@ -110,6 +113,7 @@ pub async fn send_message_notification(
     token: &str,
     bearer: Arc<RwLock<Option<String>>>,
     retry: bool,
+    android_channel_id: Option<&str>,
 ) -> Result<(), anyhow::Error> {
     let bearer_token = {
         if retry {
@@ -144,11 +148,17 @@ pub async fn send_message_notification(
         token: String,
         data: NotificationData,
         webpush: WebPush,
+        android: AndroidNotificationConfig,
     }
 
     #[derive(Serialize)]
     struct WebPush {
         fcm_options: WebPushFcmOptions,
+    }
+
+    #[derive(Serialize)]
+    struct AndroidNotificationConfig {
+        channel_id: Option<String>,
     }
 
     #[derive(Serialize)]
@@ -175,6 +185,9 @@ pub async fn send_message_notification(
                 fcm_options: WebPushFcmOptions {
                     link: full_url.to_string(),
                 },
+            },
+            android: AndroidNotificationConfig {
+                channel_id: android_channel_id.map(|c| c.to_string()),
             },
         },
     };

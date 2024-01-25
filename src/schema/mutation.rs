@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::{borrow::Borrow, collections::HashMap};
 
-use crate::notification::send_message_notification_with_retry;
+use crate::{models::split, notification::send_message_notification_with_retry};
 use async_graphql::{Context, InputObject, Object, SimpleObject};
 use futures::{stream::FuturesUnordered, StreamExt};
 use ip2country::AsnDB;
@@ -250,6 +250,7 @@ impl Mutation {
 
                 let pool = get_pool_from_context(context).await?;
                 let user_groups = _user.get_groups(pool).await?;
+                let group = Group::get_from_id(&group_id, pool).await?;
                 if user_groups.iter().any(|group| group.id == group_id) {
                     let user = User::get_from_email(&email, pool).await;
                     let user = match user {
@@ -261,7 +262,30 @@ impl Mutation {
                             user
                         }
                     };
-
+                    if let Some(token) = user.notification_token {
+                        if let Err(err) = send_message_notification_with_retry(
+                            format!(
+                                "{} added you to group {}",
+                                _user.name.as_ref().unwrap_or(&"Someone".to_string()),
+                                group.name.as_ref().unwrap_or(&"Direct Payment".to_string()),
+                            )
+                            .as_str(),
+                            "/",
+                            "https://billdivide.app/",
+                            format!(
+                                "you were added to group {} by {}",
+                                group.name.as_ref().unwrap_or(&"Direct Payment".to_string()),
+                                _user.name.as_ref().unwrap_or(&"Someone".to_string()),
+                            )
+                            .as_str(),
+                            &token,
+                            None,
+                        )
+                        .await
+                        {
+                            log::warn!("Failed to send notification {err:?}")
+                        }
+                    }
                     Group::add_to_group(&group_id, &user.id, pool)
                         .await
                         .map_err(|_e| anyhow::anyhow!("Can't create group"))?;
@@ -404,6 +428,8 @@ impl Mutation {
                     return Err(anyhow::anyhow!("Amount must be greater than 0"));
                 }
                 let pool = get_pool_from_context(context).await?;
+                let currency = Currency::get_for_id(pool, &currency_id).await?;
+                let group = Group::get_from_id(&group_id, pool).await?;
                 let splits = splits
                     .into_iter()
                     .filter(|f| f.amount > 0)
@@ -427,9 +453,42 @@ impl Mutation {
                     pool,
                 )
                 .await?;
+                for split in splits.iter() {
+                    let to_user_model = User::get_from_id(&split.user_id, pool).await;
+                    if let Ok(to_user_model) = to_user_model {
+                        if let Some(token) = to_user_model.notification_token {
+                            if let Err(err) = send_message_notification_with_retry(
+                                format!(
+                                    "{} added expense {}",
+                                    _user.name.as_ref().unwrap_or(&"Someone".to_string()),
+                                    title,
+                                )
+                                .as_str(),
+                                "/",
+                                "https://billdivide.app/",
+                                format!(
+                                    "you owe {}{} to {} in group {}",
+                                    currency.symbol,
+                                    ((split.amount as f64) / 10_f64.powi(currency.decimals as i32))
+                                        as i64,
+                                    _user.name.as_ref().unwrap_or(&"Someone".to_string()),
+                                    group.name.as_ref().unwrap_or(&"Direct Payment".to_string())
+                                )
+                                .as_str(),
+                                &token,
+                                Some("new_expense"),
+                            )
+                            .await
+                            {
+                                log::warn!("Failed to send notification {err:?}")
+                            }
+                        }
+                    }
+                }
                 for user in splits.into_iter() {
                     let _ = self.simplify_cross_group(context, user.user_id).await;
                 }
+
                 Ok(expense)
             }
         }
@@ -449,7 +508,10 @@ impl Mutation {
             .as_authorized_user()
             .ok_or(anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
+        let group = Group::get_from_id(&group_id, pool).await?;
         let members = Group::get_users(&group_id, pool).await?;
+        let currency = Currency::get_for_id(pool, &currency_id).await?;
+        let to_user_model = User::get_from_id(&to_user, pool).await?;
         if !members.iter().any(|user| user.id == to_user)
             || !members.iter().any(|user| user.id == self_user.id)
         {
@@ -471,6 +533,33 @@ impl Mutation {
         .await?;
         transaction.commit().await?;
         let _ = self.simplify_cross_group(context, to_user).await;
+        if let Some(token) = to_user_model.notification_token {
+            if let Err(err) = send_message_notification_with_retry(
+                format!(
+                    "{} paid you {}{}",
+                    self_user.name.as_ref().unwrap_or(&"Someone".to_string()),
+                    currency.symbol,
+                    ((amount as f64) / 10_f64.powi(currency.decimals as i32)) as i64
+                )
+                .as_str(),
+                "/",
+                "https://billdivide.app/",
+                format!(
+                    "{} recorded payment of {}{} to you in group {}",
+                    self_user.name.as_ref().unwrap_or(&"Someone".to_string()),
+                    currency.symbol,
+                    ((amount as f64) / 10_f64.powi(currency.decimals as i32)) as i64,
+                    group.name.unwrap_or("Direct Payment".to_string())
+                )
+                .as_str(),
+                &token,
+                Some("new_payment"),
+            )
+            .await
+            {
+                log::warn!("Failed to send notification {err:?}")
+            }
+        }
         Ok(split)
     }
 
@@ -576,6 +665,8 @@ impl Mutation {
             .as_authorized_user()
             .ok_or(anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
+        let currency = Currency::get_for_id(pool, &currency_id).await?;
+
         let with_user_model = User::get_from_id(&with_user, pool).await?;
         let mut owes = User::get_owes_with_group(&with_user, &self_user.id, pool)
             .await?
@@ -664,11 +755,24 @@ impl Mutation {
         let _ = self.simplify_cross_group(context, with_user).await;
         if let Some(token) = with_user_model.notification_token {
             if let Err(err) = send_message_notification_with_retry(
-                "Someone paid you ",
+                format!(
+                    "{} paid you {}{}",
+                    self_user.name.as_ref().unwrap_or(&"Someone".to_string()),
+                    currency.symbol,
+                    ((amount as f64) / 10_f64.powi(currency.decimals as i32)) as i64
+                )
+                .as_str(),
                 "/",
                 "https://billdivide.app/",
-                "paid you",
+                format!(
+                    "{} recorded payment of {}{} to you via Auto-Settlement",
+                    self_user.name.as_ref().unwrap_or(&"Someone".to_string()),
+                    currency.symbol,
+                    ((amount as f64) / 10_f64.powi(currency.decimals as i32)) as i64
+                )
+                .as_str(),
                 &token,
+                Some("new_payment"),
             )
             .await
             {
