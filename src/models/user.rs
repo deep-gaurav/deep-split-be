@@ -59,6 +59,7 @@ impl User {
         )
         .execute(transaction.as_mut())
         .await?;
+        transaction.commit().await?;
         Ok(user)
     }
 
