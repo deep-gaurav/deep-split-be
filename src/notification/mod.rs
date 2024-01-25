@@ -148,12 +148,17 @@ pub async fn send_message_notification(
         token: String,
         data: NotificationData,
         webpush: WebPush,
-        android: AndroidNotificationConfig,
+        android: AndroidConfig,
     }
 
     #[derive(Serialize)]
     struct WebPush {
         fcm_options: WebPushFcmOptions,
+    }
+
+    #[derive(Serialize)]
+    struct AndroidConfig {
+        notification: AndroidNotificationConfig,
     }
 
     #[derive(Serialize)]
@@ -186,8 +191,10 @@ pub async fn send_message_notification(
                     link: full_url.to_string(),
                 },
             },
-            android: AndroidNotificationConfig {
-                channel_id: android_channel_id.map(|c| c.to_string()),
+            android: AndroidConfig {
+                notification: AndroidNotificationConfig {
+                    channel_id: android_channel_id.map(|c| c.to_string()),
+                },
             },
         },
     };
