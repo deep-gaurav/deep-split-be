@@ -27,7 +27,7 @@ use schema::{
 };
 
 use sqlx::SqlitePool;
-use tower_http::cors::CorsLayer;
+use tower_http::{compression::CompressionLayer, cors::CorsLayer};
 
 use crate::{
     auth::{decode_access_token, AuthTypes, ForwardedHeader},
@@ -110,7 +110,8 @@ async fn main() -> Result<(), ()> {
         // .route("/*path", get(files_handler))
         .with_state(pool.clone())
         .layer(Extension(schema))
-        .layer(cors);
+        .layer(cors)
+        .layer(CompressionLayer::new());
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "8000".into());
 
