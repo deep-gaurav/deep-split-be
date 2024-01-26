@@ -1,10 +1,9 @@
-name: Release
+name: Nightly Release
 
 on:
   push:
     branches:
       - 'master'
-      - 'releases/**'
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
