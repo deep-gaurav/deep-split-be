@@ -62,7 +62,8 @@ jobs:
 
       - name: envset
         run: |
-          (echo 'SUBJECT=Deepsplit development build';
+          (echo 'SUBJECT=Deepsplit release build';
+          echo 'PRERELEASE=--prerelease';
            echo 'TAG_NAME=prod') >> $GITHUB_ENV
           gh release delete prod --yes || true
           git push origin :prod || true
