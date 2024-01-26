@@ -70,5 +70,7 @@ jobs:
 
 
       - name: Publish release
+        env:
+          DEBUG: api
         run: |
-          gh release create $TAG_NAME --title "$TAG_NAME" --target $GITHUB_SHA deepsplit_be*/*
+          gh release create $TAG_NAME $PRERELEASE --title "$TAG_NAME" --target $GITHUB_SHA deepsplit_be*/*
