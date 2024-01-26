@@ -10,23 +10,23 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: x86_64-unknown-linux-musl
-          components: rustfmt, clippy
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --no-self-update
+
+      - run: rustup target add x86_64-unknown-linux-musl
+
       - uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: musl-tools # provides musl-gcc
           version: 1.0
+      - uses: Swatinem/rust-cache@v2
+
       - name: Build Rust project
         run: cargo build --release --target x86_64-unknown-linux-musl
 
-      - name: Get SSH key
-        env:
-          SSH_KEY_SECRET: ${{ secrets.SSH_PRIVATE_KEY }}
-        run: echo "$SSH_KEY_SECRET" > ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa
+      - uses: webfactory/ssh-agent@v0.8.0
+        with:
+            ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add known host
         run: ssh-keyscan panel.billdivide.app >> ~/.ssh/known_hosts
