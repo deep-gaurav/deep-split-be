@@ -17,6 +17,8 @@ RUN ["/bin/bash", "-c", "set -x && rm target/x86_64-unknown-linux-musl/release/d
 
 # Now add the rest of the project and build the real main
 COPY src ./src
+COPY .env .
+COPY deepsplit.sqlite .
 RUN set -x && cargo build --target x86_64-unknown-linux-musl --release
 RUN mkdir -p /build-out
 RUN set -x && cp target/x86_64-unknown-linux-musl/release/$BINARY_NAME /build-out/
