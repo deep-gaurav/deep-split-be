@@ -77,7 +77,7 @@ pub struct FirebaseValues {
 
 #[tokio::main]
 async fn main() -> Result<(), ()> {
-    dotenvy::dotenv().expect("No env");
+    let _ = dotenvy::dotenv();
     pretty_env_logger::init();
 
     let asn_filepath = std::env::var("GEO_ASN_COUNTRY_CSV").expect("GEO_ASN_COUNTRY_CSV not var");
