@@ -1,4 +1,4 @@
-name: Build and Deploy Rust to Server
+name: Build and Deploy Rust to Server Development
 
 on:
   workflow_dispatch:  # Trigger manually
@@ -23,8 +23,7 @@ jobs:
       - name: Get SSH key
         env:
           SSH_KEY_SECRET: ${{ secrets.SSH_PRIVATE_KEY }}
-        run: echo "$SSH_KEY_SECRET" > ~/.ssh/id_rsa
-        run: chmod 600 ~/.ssh/id_rsa
+        run: echo "$SSH_KEY_SECRET" > ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa
 
       - name: Add known host
         run: ssh-keyscan panel.billdivide.app >> ~/.ssh/known_hosts
