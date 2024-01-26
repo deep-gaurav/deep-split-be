@@ -90,6 +90,7 @@ async fn main() -> Result<(), ()> {
     )
     .await
     .expect("Cannot connect to pool");
+    sqlx::migrate!().run(&pool).await.expect("Cant migrate");
 
     let otp_map: OtpMap = OtpMap::new(ExpiringHashMap::new(Duration::from_secs(5 * 60)));
 
