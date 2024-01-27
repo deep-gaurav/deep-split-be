@@ -1,6 +1,8 @@
 #!/bin/bash
 set -x
 
+cd ~/development/
+
 # Health check function to make GraphQL API call
 health_check() {
  local response=$(curl -s -X POST \
