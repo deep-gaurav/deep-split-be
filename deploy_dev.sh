@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 
 # Health check function to make GraphQL API call
 health_check() {
@@ -18,9 +19,10 @@ health_check() {
 
 
 # Checkpoint existing containers (before removal)
-podman checkpoint litestream-dev deepsplit_be-dev 2>/dev/null
+podman container checkpoint litestream-dev -e litestream-dev.checkpoint.gz 2>/dev/null
+podman container checkpoint deepsplit_be-dev -e deepsplit_be-dev.checkpoint.gz 2>/dev/null
 
-trap 'podman restore litestream-dev.checkpoint.gz deepsplit_be-dev.checkpoint.gz; echo "Restored previous containers due to error"; exit 1' ERR
+trap 'podman container restore -i litestream-dev.checkpoint.gz; podman container restore -i deepsplit_be-dev.checkpoint.gz; echo "Restored previous containers due to error"; exit 1' ERR
 
 
 # Stop and remove existing containers
