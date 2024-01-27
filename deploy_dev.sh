@@ -20,11 +20,11 @@ health_check() {
 
 # Create named volumes if they don't exist
 podman volume create data || true
-podman volume create deepsplit_be || true
+podman volume create server_binary || true
 
 # Backup volumes before making changes
 podman volume backup data backup_data.tar || true
-podman volume backup deepsplit_be backup_deepsplit_be.tar || true
+podman volume backup server_binary backup_server_binary.tar || true
 
 # Stop and remove existing containers (if any)
 podman stop litestream-dev deepsplit_be-dev || true
@@ -52,19 +52,26 @@ else
   fi
 fi
 
-# Second Stage: Run backend (using named volume and copying local files)
+# Copy new binary to server
+podman run --rm \
+    -v $(pwd)/deepsplit_be:/deepsplit_be \
+    -v server_binary:/server_binary \
+    alpine:latest \
+    sh -c "cp /deepsplit_be /server_binary/deepsplit_be"
+
+# Second Stage: Run backend 
 podman run -d \
   --name deepsplit_be-dev \
   -v data:/data \
   -v config:/config \
-  -v deepsplit_be:/deepsplit_be \
+  -v server_binary:/server_binary \
   --env-file $(pwd)/.env \
   -e DATABASE_URL=sqlite:/data/deepsplit.sqlite \
   -e GEO_ASN_COUNTRY_CSV=/config/geo-whois-asn-country-ipv4-num.csv \
   -e SERVICE_JSON=/config/billdivide-app-firebase-adminsdk-99qtd-ecb3c349aa.json \
   -p 127.0.0.1:33371:8000 \
   alpine:latest \
-  sh -c "cp -r /deepsplit_be/* /deepsplit_be/ && printenv && /deepsplit_be"
+  sh -c "printenv && /server_binary/deepsplit_be"
 
 
 # Health check after starting the containers
@@ -72,10 +79,16 @@ health_check
 
 if [ $? -ne 0 ]; then
   echo "Health check failed. Litestream container (litestream-dev) will not be started."
+  # Restore old data
   podman volume restore --force backup_data.tar
-  podman volume restore --force backup_deepsplit_be.tar
-  # Restart containers to use the restored volumes
+
+  # Restore old binary
+  podman volume restore --force backup_server_binary.tar
+
+  # Restart containers backend container with restored volumes
   podman restart deepsplit_be-dev
+
+  # Start litestream container 
   podman run -d \
     --name litestream-dev \
     -v data:/data \
@@ -88,12 +101,13 @@ if [ $? -ne 0 ]; then
 
 else
   echo "Health check passed. Starting Litestream container..."
-  # Run the command to start litestream container here
-  # Example:
+  # Run the command to start litestream container since it wasnt started anywhere
   podman run -d \
     --name litestream-dev \
     -v data:/data \
     -v config:/config \
     litestream/litestream:latest \
     replicate -config /config/litestream.yml
+  rm backup_server_binary.tar || true
+  rm backup_data.tar || true
 fi
