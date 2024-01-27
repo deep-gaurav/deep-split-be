@@ -33,3 +33,6 @@ jobs:
 
       - name: Deploy binary
         run: scp target/x86_64-unknown-linux-musl/release/deepsplit_be billdivide@panel.billdivide.app:~/development/
+      - name: Run deployment script on remote machine
+        run: |
+          ssh billdivide@panel.billdivide.app 'bash -s' < ~/development/deploy-deepsplit-dev.sh
