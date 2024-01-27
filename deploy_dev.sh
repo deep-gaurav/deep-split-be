@@ -23,34 +23,42 @@ podman volume create data || true
 podman volume create server_binary || true
 
 # Backup volumes before making changes
-podman volume backup data backup_data.tar || true
-podman volume backup server_binary backup_server_binary.tar || true
+podman volume export data -o backup_data.tar || true
+podman volume export server_binary -o backup_server_binary.tar || true
 
 # Stop and remove existing containers (if any)
 podman stop litestream-dev deepsplit_be-dev || true
-podman rm litestream-dev deepsplit_be-dev || true
+podman rm deepsplit_be-dev || true
 
-# Check if the database already exists in the volume
-if podman volume inspect data | grep -q '"data/deepsplit.sqlite"'; then
-  echo "Using existing database from volume"
-else
-  # Try to restore database from S3
-  podman run --rm \
+podman create \
+  --name litestream-dev \
+  -v data:/data \
+  -v $(pwd)/config:/config \
+  litestream/litestream:latest \
+  replicate -config /config/litestream.yml || true
+
+podman run --rm \
+  -v data:/data \
+  -v $(pwd)/config:/config \
+  litestream/litestream:latest \
+  restore -o /data/deepsplit-restored.sqlite -config /config/litestream.yml -if-replica-exists /data/deepsplit.sqlite
+
+
+podman run --rm \
     -v data:/data \
-    -v config:/config \
-    litestream/litestream:latest \
-    restore -o /data/deepsplit-restored.sqlite -config /config/litestream.yml -if-replica-exists /data/deepsplit.sqlite
-
-  # Check if restoration succeeded
-  if podman volume inspect data | grep -q '"data/deepsplit-restored.sqlite"'; then
-    echo "Database restored from S3"
-    podman exec -i litestream-dev mv /data/deepsplit-restored.sqlite /data/deepsplit.sqlite
-  else
-    # Create a new database within the volume
-    podman exec -i litestream-dev touch /data/deepsplit.sqlite
-    echo "Empty database created in volume"
-  fi
-fi
+    alpine:latest \
+    sh -c '\
+        if [ -f /data/deepsplit.sqlite ]; then \
+            echo "Using existing database from volume"; \
+        else \
+            if [ -f /data/deepsplit-restored.sqlite ]; then \
+                echo "Database restored from S3"; \
+                mv /data/deepsplit-restored.sqlite /data/deepsplit.sqlite; \
+            else \
+                touch /data/deepsplit.sqlite; \
+                echo "Empty database created"; \
+            fi; \
+        fi'
 
 # Copy new binary to server
 podman run --rm \
@@ -63,7 +71,7 @@ podman run --rm \
 podman run -d \
   --name deepsplit_be-dev \
   -v data:/data \
-  -v config:/config \
+  -v $(pwd)/config:/config \
   -v server_binary:/server_binary \
   --env-file $(pwd)/.env \
   -e DATABASE_URL=sqlite:/data/deepsplit.sqlite \
@@ -80,21 +88,16 @@ health_check
 if [ $? -ne 0 ]; then
   echo "Health check failed. Litestream container (litestream-dev) will not be started."
   # Restore old data
-  podman volume restore --force backup_data.tar
+  podman volume import backup_data.tar
 
   # Restore old binary
-  podman volume restore --force backup_server_binary.tar
+  podman volume import backup_server_binary.tar
 
   # Restart containers backend container with restored volumes
   podman restart deepsplit_be-dev
 
   # Start litestream container 
-  podman run -d \
-    --name litestream-dev \
-    -v data:/data \
-    -v config:/config \
-    litestream/litestream:latest \
-    replicate -config /config/litestream.yml
+  podman start -d litestream-dev
 
   echo "Containers restarted with restored volumes."
   exit 1
@@ -102,12 +105,7 @@ if [ $? -ne 0 ]; then
 else
   echo "Health check passed. Starting Litestream container..."
   # Run the command to start litestream container since it wasnt started anywhere
-  podman run -d \
-    --name litestream-dev \
-    -v data:/data \
-    -v config:/config \
-    litestream/litestream:latest \
-    replicate -config /config/litestream.yml
+  podman start litestream-dev
   rm backup_server_binary.tar || true
   rm backup_data.tar || true
 fi
