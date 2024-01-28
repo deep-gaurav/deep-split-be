@@ -77,6 +77,7 @@ pub struct FirebaseValues {
 
 #[tokio::main]
 async fn main() -> Result<(), ()> {
+    return Err(());
     let _ = dotenvy::dotenv();
     pretty_env_logger::init();
 
