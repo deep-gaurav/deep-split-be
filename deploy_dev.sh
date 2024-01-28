@@ -9,13 +9,13 @@ health_check() {
   -H "Content-Type: application/json" \
   -d '{"query": "{ currencies { displayName } }"}' \
   http://localhost:33371)
-  
+
  # Check if the 'currencies' array is not empty in the response
  if [[ $response == *"currencies"* && $response != *"[]"* ]]; then
   echo "Health check passed. Server is running."
  else
   echo "Health check failed. Server might not be running or didn't return expected data."
-  exit 1
+  return 1
  fi
 }
 
@@ -27,6 +27,10 @@ podman volume create server_binary || true
 # Backup volumes before making changes
 podman volume export data -o backup_data.tar || true
 podman volume export server_binary -o backup_server_binary.tar || true
+
+# Stop Systemd services
+systemctl --user stop container-deepsplit_be-dev.service || true
+systemctl --user stop container-litestream-dev.service || true
 
 # Stop and remove existing containers (if any)
 podman stop litestream-dev deepsplit_be-dev || true
@@ -69,7 +73,7 @@ podman run --rm \
     alpine:latest \
     sh -c "cp /deepsplit_be /server_binary/deepsplit_be"
 
-# Second Stage: Run backend 
+# Second Stage: Run backend
 podman run -d \
   --name deepsplit_be-dev \
   -v data:/data \
@@ -90,17 +94,20 @@ health_check
 if [ $? -ne 0 ]; then
   echo "Health check failed. Litestream container (litestream-dev) will not be started."
   # Restore old data
-  podman volume import backup_data.tar
+  podman volume import data backup_data.tar
 
   # Restore old binary
-  podman volume import backup_server_binary.tar
+  podman volume import server_binary backup_server_binary.tar
 
   # Restart containers backend container with restored volumes
   podman restart deepsplit_be-dev
 
-  # Start litestream container 
-  podman start -d litestream-dev
+  # Start litestream container
+  podman start litestream-dev
 
+  # Start Systemd services again
+  systemctl --user start container-deepsplit_be-dev.service
+  systemctl --user start container-litestream-dev.service
   echo "Containers restarted with restored volumes."
   exit 1
 
@@ -110,4 +117,8 @@ else
   podman start litestream-dev
   rm backup_server_binary.tar || true
   rm backup_data.tar || true
+
+  # Start Systemd services again
+  systemctl --user start container-deepsplit_be-dev.service
+  systemctl --user start container-litestream-dev.service
 fi
