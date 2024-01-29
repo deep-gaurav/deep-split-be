@@ -1,0 +1,37 @@
+name: Build and Deploy Rust to Server Development
+
+on:
+  workflow_dispatch:  # Trigger manually
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --no-self-update
+
+      - run: rustup target add x86_64-unknown-linux-musl
+
+      - uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: musl-tools # provides musl-gcc
+          version: 1.0
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build Rust project
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - uses: webfactory/ssh-agent@v0.8.0
+        with:
+            ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add known host
+        run: ssh-keyscan panel.billdivide.app >> ~/.ssh/known_hosts
+
+      - name: Deploy binary
+        run: scp target/x86_64-unknown-linux-musl/release/deepsplit_be billdivide@panel.billdivide.app:~/development/
+      - name: Run deployment script on remote machine
+        run: ssh billdivide@panel.billdivide.app '/home/billdivide/development/deploy-deepsplit-dev.sh'

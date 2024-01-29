@@ -77,7 +77,7 @@ pub struct FirebaseValues {
 
 #[tokio::main]
 async fn main() -> Result<(), ()> {
-    dotenvy::dotenv().expect("No env");
+    let _ = dotenvy::dotenv();
     pretty_env_logger::init();
 
     let asn_filepath = std::env::var("GEO_ASN_COUNTRY_CSV").expect("GEO_ASN_COUNTRY_CSV not var");
@@ -90,6 +90,7 @@ async fn main() -> Result<(), ()> {
     )
     .await
     .expect("Cannot connect to pool");
+    sqlx::migrate!().run(&pool).await.expect("Cant migrate");
 
     let otp_map: OtpMap = OtpMap::new(ExpiringHashMap::new(Duration::from_secs(5 * 60)));
 

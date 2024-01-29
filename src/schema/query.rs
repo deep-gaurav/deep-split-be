@@ -156,6 +156,10 @@ impl Query {
         }
     }
 
+    pub async fn server_commit_id(&self) -> &str {
+        env!("GIT_HASH")
+    }
+
     pub async fn overall_owed<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<Amount>> {
         let user = context
             .data::<AuthTypes>()
