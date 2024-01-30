@@ -284,6 +284,8 @@ impl Mutation {
                         .await
                         {
                             log::warn!("Failed to send notification {err:?}")
+                        } else {
+                            log::info!("Notification sent")
                         }
                     }
                     Group::add_to_group(&group_id, &user.id, pool)
@@ -482,6 +484,8 @@ impl Mutation {
                             {
                                 log::warn!("Failed to send notification {err:?}")
                             }
+                        } else {
+                            log::info!("Notification sent")
                         }
                     }
                 }
@@ -558,6 +562,8 @@ impl Mutation {
             .await
             {
                 log::warn!("Failed to send notification {err:?}")
+            } else {
+                log::info!("Notification sent")
             }
         }
         Ok(split)
@@ -777,6 +783,8 @@ impl Mutation {
             .await
             {
                 log::warn!("Failed to send notification {err:?}")
+            } else {
+                log::info!("Notification sent")
             }
         }
         Ok(splits)
