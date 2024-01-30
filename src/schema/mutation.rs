@@ -287,6 +287,8 @@ impl Mutation {
                         } else {
                             log::info!("Notification sent")
                         }
+                    } else {
+                        log::info!("Skipping notification, no token")
                     }
                     Group::add_to_group(&group_id, &user.id, pool)
                         .await
@@ -483,9 +485,11 @@ impl Mutation {
                             .await
                             {
                                 log::warn!("Failed to send notification {err:?}")
+                            } else {
+                                log::info!("Notification sent")
                             }
                         } else {
-                            log::info!("Notification sent")
+                            log::info!("Skipping notification, no token")
                         }
                     }
                 }
@@ -565,6 +569,8 @@ impl Mutation {
             } else {
                 log::info!("Notification sent")
             }
+        } else {
+            log::info!("Skipping notification, no token")
         }
         Ok(split)
     }
@@ -786,6 +792,8 @@ impl Mutation {
             } else {
                 log::info!("Notification sent")
             }
+        } else {
+            log::info!("Skipping notification, no token")
         }
         Ok(splits)
     }
