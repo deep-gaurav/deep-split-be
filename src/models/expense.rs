@@ -21,6 +21,8 @@ pub struct Expense {
 
     pub amount: i64,
     pub currency_id: String,
+
+    pub category: String,
 }
 
 #[Object]
@@ -40,6 +42,10 @@ impl Expense {
     pub async fn creator<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<User> {
         let pool = get_pool_from_context(context).await?;
         User::get_from_id(&self.created_by, pool).await
+    }
+
+    pub async fn category(&self) -> &str {
+        &self.category
     }
 
     pub async fn creator_id(&self) -> &str {
@@ -72,6 +78,7 @@ impl Expense {
         group_id: &str,
         amount: &Amount,
         splits: Vec<SplitInput>,
+        category: &str,
         pool: &SqlitePool,
     ) -> anyhow::Result<Expense> {
         let mut transaction = pool.begin().await?;
@@ -79,10 +86,10 @@ impl Expense {
         let time = chrono::Utc::now().to_rfc3339();
         let expense = sqlx::query_as!(
             Expense,
-            r#"INSERT INTO expenses(id, title, created_at, created_by, group_id, amount, currency_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            r#"INSERT INTO expenses(id, title, created_at, created_by, group_id, amount, currency_id, category)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING
-            id as "id!", title as "title!", created_at as "created_at!", created_by as "created_by!", group_id as "group_id!", amount as "amount!", currency_id as "currency_id!"
+            id as "id!", title as "title!", created_at as "created_at!", created_by as "created_by!", group_id as "group_id!", amount as "amount!", currency_id as "currency_id!", category as "category!"
             "#,
             id,
             title,
@@ -90,7 +97,8 @@ impl Expense {
             user_id,
             group_id,
             amount.amount,
-            amount.currency_id
+            amount.currency_id,
+            category
         ).fetch_one(transaction.as_mut()).await?;
         let ttype = TransactionType::ExpenseSplit.to_string();
 

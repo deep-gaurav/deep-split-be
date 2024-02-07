@@ -326,7 +326,8 @@ impl Query {
                 e.created_by AS expense_created_by,
                 e.group_id AS expense_group_id,
                 e.currency_id AS expense_currency_id,
-                e.amount AS expense_amount
+                e.amount AS expense_amount,
+                e.category as expense_category
             FROM 
                 split_transactions st
             LEFT JOIN 
@@ -356,6 +357,7 @@ impl Query {
                     group_id: row.expense_group_id.unwrap(),
                     amount: row.expense_amount.unwrap(),
                     currency_id: row.expense_currency_id.unwrap(),
+                    category: row.expense_category.unwrap(),
                 })
             } else {
                 None
@@ -415,7 +417,8 @@ impl Query {
                         e.created_by as expense_created_by,
                         e.group_id as expense_group_id,
                         e.amount as expense_amount,
-                        e.currency_id as expense_currency_id
+                        e.currency_id as expense_currency_id,
+                        e.category as expense_category
                     FROM expenses e
                     LEFT JOIN split_transactions st ON st.expense_id = e.id AND (st.to_user = $1 OR st.from_user = $1)
                     WHERE e.group_id = $2
@@ -439,7 +442,8 @@ impl Query {
                         e.created_by as expense_created_by,
                         e.group_id as expense_group_id,
                         e.amount as expense_amount,
-                        e.currency_id as expense_currency_id
+                        e.currency_id as expense_currency_id,
+                        e.category as expense_category
                     FROM split_transactions st
                     LEFT JOIN expenses e ON st.expense_id = e.id
                     WHERE st.to_user = $1 OR st.from_user = $1
@@ -477,6 +481,7 @@ impl Query {
                             created_by: row.expense_created_by.unwrap(),
                             group_id: row.expense_group_id.unwrap(),
                             amount: row.expense_amount.unwrap(),
+                            category: row.expense_category.unwrap(),
                         })
                     }else{
                         None
@@ -495,7 +500,6 @@ impl Query {
                             created_at:row.split_transaction_created_at.unwrap(),
                             created_by: row.split_transaction_created_by.unwrap(),
                             with_group_id: row.split_transaction_with_group_id,
-
                         })
                     }else{
                         None
@@ -525,7 +529,8 @@ impl Query {
                         e.created_by as expense_created_by,
                         e.group_id as expense_group_id,
                         e.amount as expense_amount,
-                        e.currency_id as expense_currency_id
+                        e.currency_id as expense_currency_id,
+                        e.category as expense_category
                     FROM expenses e
                     LEFT JOIN split_transactions st ON st.expense_id = e.id AND (st.to_user = $1 OR st.from_user = $1)
                     WHERE e.group_id = $2
@@ -549,7 +554,9 @@ impl Query {
                         e.created_by as expense_created_by,
                         e.group_id as expense_group_id,
                         e.amount as expense_amount,
-                        e.currency_id as expense_currency_id
+                        e.currency_id as expense_currency_id,
+                        e.category as expense_category
+
                     FROM split_transactions st
                     LEFT JOIN expenses e ON st.expense_id = e.id
                     WHERE (st.to_user = $1 OR st.from_user = $1)
@@ -585,6 +592,7 @@ impl Query {
                             created_by: row.expense_created_by.unwrap(),
                             group_id: row.expense_group_id.unwrap(),
                             amount: row.expense_amount.unwrap(),
+                            category: row.expense_category.unwrap(),
                         })
                     }else{
                         None
@@ -603,6 +611,7 @@ impl Query {
                             created_at:row.split_transaction_created_at.unwrap(),
                             created_by: row.split_transaction_created_by.unwrap(),
                             with_group_id: row.split_transaction_with_group_id,
+                            
                         })
                     }else{
                         None
@@ -667,7 +676,7 @@ impl Query {
             sqlx::query_as!(
                 Expense,
                 r#"
-    SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount, e.currency_id
+    SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount, e.currency_id, e.category
     FROM expenses e
     JOIN split_transactions s ON e.id = s.expense_id
     WHERE ((s.from_user = $1 AND s.to_user = $2)
@@ -686,7 +695,7 @@ impl Query {
             sqlx::query_as!(
                 Expense,
                 r#"
-    SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount, e.currency_id
+    SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount, e.currency_id, e.category
     FROM expenses e
     JOIN split_transactions s ON e.id = s.expense_id
     WHERE (s.from_user = $1 AND s.to_user = $2)

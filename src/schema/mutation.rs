@@ -308,6 +308,7 @@ impl Mutation {
         amount: i64,
         currency_id: String,
         splits: Vec<SplitInputNonGroup>,
+        category: String,
     ) -> anyhow::Result<NonGroupExpense> {
         let auth_type = context
             .data::<AuthTypes>()
@@ -398,6 +399,7 @@ impl Mutation {
                         amount,
                         currency_id,
                         splits.clone(),
+                        category,
                     )
                     .await?;
                 for user in splits.into_iter() {
@@ -417,6 +419,7 @@ impl Mutation {
         amount: i64,
         currency_id: String,
         splits: Vec<SplitInput>,
+        category: String,
     ) -> anyhow::Result<Expense> {
         let auth_type = context
             .data::<AuthTypes>()
@@ -454,6 +457,7 @@ impl Mutation {
                         currency_id,
                     },
                     splits.clone(),
+                    &category,
                     pool,
                 )
                 .await?;
