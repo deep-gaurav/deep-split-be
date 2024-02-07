@@ -308,7 +308,7 @@ impl Mutation {
         amount: i64,
         currency_id: String,
         splits: Vec<SplitInputNonGroup>,
-        category: String,
+        #[graphql(default = "\"MISC\".to_string()")] category: String,
     ) -> anyhow::Result<NonGroupExpense> {
         let auth_type = context
             .data::<AuthTypes>()
@@ -419,7 +419,7 @@ impl Mutation {
         amount: i64,
         currency_id: String,
         splits: Vec<SplitInput>,
-        category: String,
+        #[graphql(default = "\"MISC\".to_string()")] category: String,
     ) -> anyhow::Result<Expense> {
         let auth_type = context
             .data::<AuthTypes>()
