@@ -1,3 +1,8 @@
+COMMIT;
+
+PRAGMA foreign_keys = OFF;
+
+BEGIN TRANSACTION;
 -- Step 1: Add the new column 'category' with a default value
 ALTER TABLE expenses
 ADD COLUMN category TEXT DEFAULT 'MISC';
@@ -34,3 +39,9 @@ INSERT INTO new_expenses SELECT * FROM expenses;
 -- Step 5: Rename the new table to the original table name
 DROP TABLE expenses;
 ALTER TABLE new_expenses RENAME TO expenses;
+
+COMMIT;
+
+PRAGMA foreign_keys = ON;
+
+BEGIN TRANSACTION;
