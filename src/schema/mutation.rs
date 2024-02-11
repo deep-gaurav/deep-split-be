@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, collections::HashMap};
 
-use crate::{models::split, notification::send_message_notification_with_retry};
-use async_graphql::{Context, InputObject, Object, SimpleObject};
+use crate::{models::split, notification::send_message_notification_with_retry, s3::S3};
+use async_graphql::{context, Context, InputObject, Object, SimpleObject};
 use futures::{stream::FuturesUnordered, StreamExt};
 use ip2country::AsnDB;
 use log::debug;
@@ -901,8 +901,8 @@ impl Mutation {
 
                 let ttype = TransactionType::CurrencyConversion.to_string();
 
-                /// TODO: handle better way fails after 9,007,199,254,740,993
-                /// https://www.reddit.com/r/rust/comments/js1avn/comment/gbxbm2y/?utm_source=share&utm_medium=web2x&context=3
+                // TODO: handle better way fails after 9,007,199,254,740,993
+                // https://www.reddit.com/r/rust/comments/js1avn/comment/gbxbm2y/?utm_source=share&utm_medium=web2x&context=3
                 let from_amount = owed.abs();
 
                 let to_amount = (((owed.abs() as f64)
@@ -1009,6 +1009,27 @@ impl Mutation {
         }
     }
 
+    pub async fn upload_image<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        size: u64,
+    ) -> anyhow::Result<ImageUploadData> {
+        let _user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let s3 = context
+            .data::<S3>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
+        let id = uuid::Uuid::new_v4();
+        let url = s3.new_image_upload_presign_url(&id, size).await?;
+        Ok(ImageUploadData {
+            id: id.to_string(),
+            presigned_url: url,
+        })
+    }
+
     // pub async fn settle_expense<'ctx>(
     //     &self,
     //     context: &Context<'ctx>,
@@ -1057,4 +1078,10 @@ pub struct SplitInputNonGroup {
     pub amount: i64,
     pub email: Option<String>,
     pub user_id: Option<String>,
+}
+
+#[derive(SimpleObject)]
+pub struct ImageUploadData {
+    id: String,
+    presigned_url: String,
 }

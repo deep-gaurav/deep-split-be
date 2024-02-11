@@ -28,6 +28,7 @@ use schema::{
 
 use sqlx::SqlitePool;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer};
+use uuid::Uuid;
 
 use crate::{
     auth::{decode_access_token, AuthTypes, ForwardedHeader},
@@ -41,6 +42,7 @@ pub mod email;
 pub mod expire_map;
 pub mod models;
 pub mod notification;
+pub mod s3;
 pub mod schema;
 
 type MainSchema = Schema<Query, Mutation, EmptySubscription>;
@@ -80,6 +82,7 @@ async fn main() -> Result<(), ()> {
     let _ = dotenvy::dotenv();
     pretty_env_logger::init();
 
+    let s3 = s3::S3::init_from_env().await.expect("Cannot initialize s3");
     let asn_filepath = std::env::var("GEO_ASN_COUNTRY_CSV").expect("GEO_ASN_COUNTRY_CSV not var");
     let asn_db = ip2country::AsnDB::default()
         .load_ipv4(&asn_filepath)
@@ -97,6 +100,7 @@ async fn main() -> Result<(), ()> {
     let schema = MainSchema::build(Query, Mutation, EmptySubscription)
         .data(otp_map)
         .data(asn_db)
+        .data(s3)
         .extension(async_graphql::extensions::ApolloTracing)
         .finish();
 
