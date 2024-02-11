@@ -17,7 +17,7 @@ jobs:
 
       - uses: awalsh128/cache-apt-pkgs-action@v1
         with:
-          packages: musl-tools # provides musl-gcc
+          packages: musl-tools libssl-dev # provides musl-gcc
           version: 1.0
       - uses: Swatinem/rust-cache@v2
 
