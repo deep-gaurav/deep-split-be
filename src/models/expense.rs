@@ -1,7 +1,10 @@
 use async_graphql::{Context, Object};
 use sqlx::SqlitePool;
 
-use crate::schema::{get_pool_from_context, mutation::SplitInput};
+use crate::{
+    s3::S3,
+    schema::{get_pool_from_context, mutation::SplitInput},
+};
 
 use super::{
     amount::Amount,
@@ -23,6 +26,9 @@ pub struct Expense {
     pub currency_id: String,
 
     pub category: String,
+
+    pub note: Option<String>,
+    pub image_id: Option<String>,
 }
 
 #[Object]
@@ -69,6 +75,23 @@ impl Expense {
 
         self.get_splits(pool).await
     }
+
+    pub async fn image_id(&self) -> &Option<String> {
+        &self.image_id
+    }
+
+    pub async fn note(&self) -> &Option<String> {
+        &self.note
+    }
+
+    pub async fn image_url<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Option<String>> {
+        let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;
+        if let Some(id) = &self.image_id {
+            Ok(Some(s3.get_public_url(id)))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 impl Expense {
@@ -79,6 +102,9 @@ impl Expense {
         amount: &Amount,
         splits: Vec<SplitInput>,
         category: &str,
+        note: Option<String>,
+        image_id: Option<String>,
+        s3: &S3,
         pool: &SqlitePool,
     ) -> anyhow::Result<Expense> {
         let mut transaction = pool.begin().await?;
@@ -86,10 +112,10 @@ impl Expense {
         let time = chrono::Utc::now().to_rfc3339();
         let expense = sqlx::query_as!(
             Expense,
-            r#"INSERT INTO expenses(id, title, created_at, created_by, group_id, amount, currency_id, category)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            r#"INSERT INTO expenses(id, title, created_at, created_by, group_id, amount, currency_id, category, note, image_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING
-            id as "id!", title as "title!", created_at as "created_at!", created_by as "created_by!", group_id as "group_id!", amount as "amount!", currency_id as "currency_id!", category as "category!"
+            id as "id!", title as "title!", created_at as "created_at!", created_by as "created_by!", group_id as "group_id!", amount as "amount!", currency_id as "currency_id!", category as "category!", note, image_id
             "#,
             id,
             title,
@@ -98,7 +124,9 @@ impl Expense {
             group_id,
             amount.amount,
             amount.currency_id,
-            category
+            category,
+            note,
+            image_id
         ).fetch_one(transaction.as_mut()).await?;
         let ttype = TransactionType::ExpenseSplit.to_string();
 
@@ -130,6 +158,9 @@ impl Expense {
     );
             e}
         )?;
+        }
+        if let Some(image_id) = image_id {
+            s3.move_to_be(&image_id);
         }
         transaction.commit().await?;
         Ok(expense)

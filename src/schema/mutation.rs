@@ -308,6 +308,8 @@ impl Mutation {
         amount: i64,
         currency_id: String,
         splits: Vec<SplitInputNonGroup>,
+        note: Option<String>,
+        image_id: Option<String>,
         #[graphql(default = "\"MISC\".to_string()")] category: String,
     ) -> anyhow::Result<NonGroupExpense> {
         let auth_type = context
@@ -399,6 +401,8 @@ impl Mutation {
                         amount,
                         currency_id,
                         splits.clone(),
+                        note,
+                        image_id,
                         category,
                     )
                     .await?;
@@ -419,8 +423,12 @@ impl Mutation {
         amount: i64,
         currency_id: String,
         splits: Vec<SplitInput>,
+        note: Option<String>,
+        image_id: Option<String>,
         #[graphql(default = "\"MISC\".to_string()")] category: String,
     ) -> anyhow::Result<Expense> {
+        let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;
+
         let auth_type = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
@@ -458,6 +466,9 @@ impl Mutation {
                     },
                     splits.clone(),
                     &category,
+                    note,
+                    image_id,
+                    s3,
                     pool,
                 )
                 .await?;

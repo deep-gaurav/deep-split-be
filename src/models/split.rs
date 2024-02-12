@@ -3,7 +3,7 @@ use std::str::FromStr;
 use async_graphql::{Context, Enum, Object};
 use strum::{Display, EnumString};
 
-use crate::schema::get_pool_from_context;
+use crate::{s3::S3, schema::get_pool_from_context};
 
 use super::{amount::Amount, expense::Expense, group::Group, user::User};
 
@@ -21,6 +21,9 @@ pub struct Split {
     pub created_at: String,
     pub created_by: String,
     pub with_group_id: Option<String>,
+
+    pub note: Option<String>,
+    pub image_id: Option<String>,
 }
 
 #[Object]
@@ -109,6 +112,23 @@ impl Split {
 
     pub async fn with_group_id(&self) -> Option<String> {
         self.with_group_id.clone()
+    }
+
+    pub async fn image_id(&self) -> &Option<String> {
+        &self.image_id
+    }
+
+    pub async fn note(&self) -> &Option<String> {
+        &self.note
+    }
+
+    pub async fn image_url<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Option<String>> {
+        let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;
+        if let Some(id) = &self.image_id {
+            Ok(Some(s3.get_public_url(id)))
+        } else {
+            Ok(None)
+        }
     }
 }
 

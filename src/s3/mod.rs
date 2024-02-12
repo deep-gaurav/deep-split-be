@@ -12,6 +12,7 @@ pub struct S3 {
     // r2_endpoint_url: String,
     // r2_bucket: String,
     // s3_client: aws_sdk_s3::Client,
+    public_url: String,
     bucket: Bucket,
 }
 
@@ -22,6 +23,8 @@ impl S3 {
             std::env::var("R2_SECRET_ACCESS_KEY").expect("no var R2_SECRET_ACCESS_KEY");
         let r2_account_id = std::env::var("R2_ACCOUNT_ID").expect("no var R2_ACCOUNT_ID");
         let r2_bucket = std::env::var("R2_BUCKET").expect("no var R2_BUCKET");
+        let public_url =
+            std::env::var("R2_BUCKED_PUBLIC_URL").expect("no var R2_BUCKED_PUBLIC_URL");
 
         let credentials = Credentials::new(
             Some(&access_key_id),
@@ -38,7 +41,7 @@ impl S3 {
             credentials,
         )?;
 
-        Ok(Self { bucket })
+        Ok(Self { bucket, public_url })
     }
 
     pub async fn new_image_upload_presign_url(
@@ -53,5 +56,16 @@ impl S3 {
             .bucket
             .presign_put(format!("fe_image/{id}.avif"), 15 * 60, Some(headers))?;
         Ok(url)
+    }
+
+    pub async fn move_to_be(&self, id: &str) -> anyhow::Result<()> {
+        self.bucket
+            .copy_object_internal(format!("fe_image/{id}.avif"), format!("images/{id}.avif"))
+            .await?;
+        Ok(())
+    }
+
+    pub fn get_public_url(&self, id: &str) -> String {
+        format!("{}/images/{id}.avif", self.public_url)
     }
 }

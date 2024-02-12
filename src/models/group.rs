@@ -249,7 +249,7 @@ impl Group {
             sqlx::query_as!(
                 Expense,
                 r#"SELECT 
-                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!", currency_id as "currency_id!", category as "category!" 
+                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!", currency_id as "currency_id!", category as "category!", note, image_id
                 FROM expenses where group_id=$1 AND created_at<$3 ORDER BY created_at DESC LIMIT $2"#,
                 self.id,
                 limit,
@@ -261,7 +261,7 @@ impl Group {
             sqlx::query_as!(
                 Expense,
                 r#"SELECT 
-                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!", currency_id as "currency_id!", category as "category!" 
+                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!", currency_id as "currency_id!", category as "category!", note, image_id
                 FROM expenses where group_id=$1 ORDER BY created_at DESC LIMIT $2"#,
                 self.id,
                 limit,
