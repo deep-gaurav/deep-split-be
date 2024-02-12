@@ -24,7 +24,7 @@ impl S3 {
         let r2_account_id = std::env::var("R2_ACCOUNT_ID").expect("no var R2_ACCOUNT_ID");
         let r2_bucket = std::env::var("R2_BUCKET").expect("no var R2_BUCKET");
         let public_url =
-            std::env::var("R2_BUCKED_PUBLIC_URL").expect("no var R2_BUCKED_PUBLIC_URL");
+            std::env::var("R2_BUCKET_PUBLIC_URL").expect("no var R2_BUCKET_PUBLIC_URL");
 
         let credentials = Credentials::new(
             Some(&access_key_id),
