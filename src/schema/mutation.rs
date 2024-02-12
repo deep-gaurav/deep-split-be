@@ -1030,6 +1030,9 @@ impl Mutation {
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
             .as_authorized_user()
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        if size > 1024 * 400 {
+            return Err(anyhow::anyhow!("Image size too big!"));
+        }
         let s3 = context
             .data::<S3>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
