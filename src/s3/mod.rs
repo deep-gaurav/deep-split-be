@@ -59,9 +59,12 @@ impl S3 {
     }
 
     pub async fn move_to_be(&self, id: &str) -> anyhow::Result<()> {
-        self.bucket
+        log::info!("Moving fe_image/{id}.avif to images/{id}.avif");
+        let status = self
+            .bucket
             .copy_object_internal(format!("fe_image/{id}.avif"), format!("images/{id}.avif"))
             .await?;
+        log::info!("Moving status: {status}");
         Ok(())
     }
 
