@@ -160,7 +160,7 @@ impl Expense {
         )?;
         }
         if let Some(image_id) = image_id {
-            s3.move_to_be(&image_id);
+            s3.move_to_be(&image_id).await?;
         }
         transaction.commit().await?;
         Ok(expense)
