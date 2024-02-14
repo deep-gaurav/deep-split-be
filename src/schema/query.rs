@@ -718,6 +718,7 @@ impl Query {
         limit: u32,
         pool: &SqlitePool,
     ) -> anyhow::Result<Vec<Expense>> {
+        let from_time = from_time.unwrap_or(chrono::Utc::now().to_rfc3339());
         let direct_group =
             Group::find_group_for_users(vec![user_1.to_string(), user_2.to_string()], pool).await;
         if let Ok(direct_group) = direct_group {
@@ -760,8 +761,7 @@ impl Query {
                 return Ok(expenses);
             }
         }
-        let expenses = if let Some(from_time) = from_time {
-            sqlx::query_as!(
+        let expenses = sqlx::query_as!(
                 Expense,
                 r#"
     SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount, e.currency_id, e.category, e.note, e.image_id
@@ -778,25 +778,8 @@ impl Query {
                 from_time
             )
             .fetch_all(pool)
-            .await?
-        } else {
-            sqlx::query_as!(
-                Expense,
-                r#"
-    SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount, e.currency_id, e.category, e.note, e.image_id
-    FROM expenses e
-    JOIN split_transactions s ON e.id = s.expense_id
-    WHERE (s.from_user = $1 AND s.to_user = $2)
-    OR (s.from_user = $2 AND s.to_user = $1)
-    ORDER BY created_at DESC LIMIT $3
-                "#,
-                user_1,
-                user_2,
-                limit,
-            )
-            .fetch_all(pool)
-            .await?
-        };
+            .await?;
+
         Ok(expenses)
     }
 }
