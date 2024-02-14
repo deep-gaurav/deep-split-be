@@ -333,7 +333,6 @@ impl Query {
                 e.category as expense_category,
                 e.note AS expense_note,
                 e.image_id AS expense_image_id
-
             FROM 
                 split_transactions st
             LEFT JOIN 
@@ -719,6 +718,48 @@ impl Query {
         limit: u32,
         pool: &SqlitePool,
     ) -> anyhow::Result<Vec<Expense>> {
+        let direct_group =
+            Group::find_group_for_users(vec![user_1.to_string(), user_2.to_string()], pool).await;
+        if let Ok(direct_group) = direct_group {
+            if direct_group.name.is_none() {
+                let expenses = sqlx::query_as!(
+                    Expense,
+                    r#"
+                    WITH expense_users AS (
+                        SELECT e.id, e.title, e.created_at, e.created_by, e.group_id, e.amount, e.currency_id, e.category, e.note, e.image_id
+                        FROM expenses e
+                        JOIN split_transactions s ON e.id = s.expense_id
+                        WHERE ((s.from_user = $1 AND s.to_user = $2) OR (s.from_user = $2 AND s.to_user = $1))
+                    ),
+                    expense_group AS (
+                        SELECT e.id, e.title, e.created_at, e.created_by, e.group_id, e.amount, e.currency_id, e.category, e.note, e.image_id
+                        FROM expenses e
+                        WHERE e.group_id = $5
+                    ),
+                    all_expenses AS (
+                        SELECT id, title, created_at, created_by, group_id, amount, currency_id, category, note, image_id
+                        FROM expense_users
+                        UNION ALL
+                        SELECT id, title, created_at, created_by, group_id, amount, currency_id, category, note, image_id
+                        FROM expense_group
+                    )
+                    SELECT *
+                    FROM all_expenses
+                    WHERE created_at < $4
+                    ORDER BY created_at DESC
+                    LIMIT $3
+                    "#,
+                    user_1,
+                    user_2,
+                    limit,
+                    from_time,
+                    direct_group.id,
+                )
+                .fetch_all(pool)
+                .await?;
+                return Ok(expenses);
+            }
+        }
         let expenses = if let Some(from_time) = from_time {
             sqlx::query_as!(
                 Expense,
