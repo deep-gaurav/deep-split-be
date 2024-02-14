@@ -14,6 +14,7 @@ use crate::{
         split::Split,
         user::{User, UserConfig},
     },
+    s3::S3,
 };
 
 use super::get_pool_from_context;
@@ -672,6 +673,20 @@ impl Query {
         .fetch_one(pool)
         .await?;
         Ok(config)
+    }
+
+    pub async fn image_url<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        id: String,
+    ) -> anyhow::Result<String> {
+        let _user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;
+        Ok(s3.get_public_url(&id))
     }
 }
 

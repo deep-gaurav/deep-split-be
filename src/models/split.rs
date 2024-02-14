@@ -121,15 +121,6 @@ impl Split {
     pub async fn note(&self) -> &Option<String> {
         &self.note
     }
-
-    pub async fn image_url<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Option<String>> {
-        let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;
-        if let Some(id) = &self.image_id {
-            Ok(Some(s3.get_public_url(id)))
-        } else {
-            Ok(None)
-        }
-    }
 }
 
 impl Split {
