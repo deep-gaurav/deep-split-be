@@ -1,11 +1,9 @@
-use std::str::FromStr;
-
 use async_graphql::{Context, Object, SimpleObject, Union};
-use ip2country::AsnDB;
+
 use sqlx::SqlitePool;
 
 use crate::{
-    auth::{AuthTypes, ForwardedHeader},
+    auth::AuthTypes,
     models::{
         amount::Amount,
         currency::Currency,
@@ -721,8 +719,11 @@ impl Query {
         let from_time = from_time.unwrap_or(chrono::Utc::now().to_rfc3339());
         let direct_group =
             Group::find_group_for_users(vec![user_1.to_string(), user_2.to_string()], pool).await;
+        log::info!("Found group with user");
         if let Ok(direct_group) = direct_group {
             if direct_group.name.is_none() {
+                log::info!("Using direct group with user");
+
                 let expenses = sqlx::query_as!(
                     Expense,
                     r#"
