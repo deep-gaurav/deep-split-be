@@ -80,6 +80,18 @@ impl Query {
         Ok(user)
     }
 
+    pub async fn expense_by_id<'ctx>(&self, context: &Context<'ctx>, id: String) -> anyhow::Result<Expense>{
+        let _user = context
+        .data::<AuthTypes>()
+        .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+        .as_authorized_user()
+        .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool: &sqlx::Pool<sqlx::Sqlite> = get_pool_from_context(context).await?;
+        
+        let expense = Expense::get_from_id(&id, pool).await?;
+        Ok(expense)
+    }
+
     // pub async fn expenses_with_user<'ctx>(
     //     &self,
     //     context: &Context<'ctx>,
