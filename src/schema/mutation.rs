@@ -524,6 +524,8 @@ impl Mutation {
         group_id: String,
         amount: i64,
         currency_id: String,
+        image_id: Option<String>,
+        note: Option<String>,
     ) -> anyhow::Result<Split> {
         let self_user = context
             .data::<AuthTypes>()
@@ -552,6 +554,8 @@ impl Mutation {
             &mut transaction,
             None,
             &currency_id,
+            note,
+            image_id,
         )
         .await?;
         transaction.commit().await?;
@@ -646,6 +650,8 @@ impl Mutation {
                                 &mut transaction,
                                 Some(negative_val.1.clone()),
                                 currency,
+                                None,
+                                None,
                             )
                             .await?,
                         );
@@ -661,6 +667,8 @@ impl Mutation {
                                 &mut transaction,
                                 Some(positive.1.clone()),
                                 currency,
+                                None,
+                                None,
                             )
                             .await?,
                         );
@@ -685,6 +693,8 @@ impl Mutation {
         with_user: String,
         amount: i64,
         currency_id: String,
+        image_id: Option<String>,
+        note: Option<String>,
     ) -> anyhow::Result<Vec<Split>> {
         let self_user = context
             .data::<AuthTypes>()
@@ -732,6 +742,8 @@ impl Mutation {
                         &mut transaction,
                         None,
                         &currency_id,
+                        note.clone(),
+                        image_id.clone(),
                     )
                     .await?,
                 )
@@ -774,6 +786,8 @@ impl Mutation {
                     &mut transaction,
                     None,
                     &currency_id,
+                    note,
+                    image_id,
                 )
                 .await?,
             );

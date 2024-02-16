@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use async_graphql::{Context, Enum, Object};
+use sqlx::SqlitePool;
 use strum::{Display, EnumString};
 
 use crate::{s3::S3, schema::get_pool_from_context};
@@ -121,11 +122,35 @@ impl Split {
     pub async fn note(&self) -> &Option<String> {
         &self.note
     }
+
+    pub async fn siblings<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<Split>> {
+        let pool = get_pool_from_context(context).await?;
+        if let Some(part) = &self.part_transaction {
+            let splits = sqlx::query_as!(
+                Split,
+                "SELECT * FROM split_transactions WHERE part_transaction=$1 AND id!=$2",
+                part,
+                self.id
+            )
+            .fetch_all(pool)
+            .await?;
+            Ok(splits)
+        } else {
+            Ok(vec![])
+        }
+    }
 }
 
 impl Split {
     pub fn get_transaction_type(&self) -> TransactionType {
         TransactionType::from_str(&self.transaction_type).unwrap_or(TransactionType::CashPaid)
+    }
+
+    pub async fn get_from_id(id: &str, pool: &SqlitePool) -> anyhow::Result<Split> {
+        let split = sqlx::query_as!(Split, "SELECT * FROM split_transactions WHERE id=$1", id)
+            .fetch_one(pool)
+            .await?;
+        Ok(split)
     }
 }
 
