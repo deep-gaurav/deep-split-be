@@ -104,6 +104,17 @@ impl Query {
         Ok(split)
     }
 
+    pub async fn splits_by_part<'ctx>(&self, context: &Context<'ctx>, part_id:String) -> anyhow::Result<Vec<Split>>{
+        let _user = context
+        .data::<AuthTypes>()
+        .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+        .as_authorized_user()
+        .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool: &sqlx::Pool<sqlx::Sqlite> = get_pool_from_context(context).await?;
+        let split = sqlx::query_as!(Split, "SELECT * FROM split_transactions WHERE part_transaction = $1", part_id).fetch_all(pool).await?;
+        Ok(split)
+    }
+
     // pub async fn expenses_with_user<'ctx>(
     //     &self,
     //     context: &Context<'ctx>,
