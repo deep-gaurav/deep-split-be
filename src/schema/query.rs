@@ -240,7 +240,15 @@ impl Query {
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
         let direct_group =
-        Group::find_group_for_users(vec![with_user.to_string(), user.id.to_string()], pool).await.ok().and_then(|group|
+        Group::find_group_for_users(
+            if with_user!=user.id {
+                vec![with_user.to_string(), user.id.to_string()]
+            }
+            else {
+                vec![with_user.to_string()]
+            },
+            pool
+        ).await.ok().and_then(|group|
         if group.name.is_none(){
             Some(group.id)
         }else{
