@@ -896,7 +896,7 @@ LEFT JOIN expenses AS e ON e.created_by = u.id AND e.group_id = $2
 OR e.id IN (SELECT expense_id FROM split_transactions WHERE from_user = u.id AND group_id = $2)
 LEFT JOIN split_transactions AS st ON st.expense_id = e.id AND st.group_id = $2 AND (st.from_user=$1 OR st.to_user=$1)
 WHERE u.id = $1
-GROUP BY u.id;
+GROUP BY u.id, e.category;
         ",user.id, group_id).fetch_all(pool).await?;
         let mut categorised_amount = Vec::new();
         for rec in data {
