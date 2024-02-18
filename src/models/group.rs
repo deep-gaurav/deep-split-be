@@ -5,7 +5,7 @@ use async_graphql::{Context, Object, SimpleObject};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-use crate::{auth::AuthTypes, schema::get_pool_from_context};
+use crate::{auth::AuthTypes, s3::S3, schema::get_pool_from_context};
 
 use super::{
     amount::Amount,
@@ -340,6 +340,7 @@ impl Group {
         )
         .fetch_one(transaction.as_mut())
         .await?;
+
         Ok(split)
     }
 }

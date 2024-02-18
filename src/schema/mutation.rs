@@ -533,6 +533,8 @@ impl Mutation {
             .as_authorized_user()
             .ok_or(anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
+        let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;
+
         let group = Group::get_from_id(&group_id, pool).await?;
         let members = Group::get_users(&group_id, pool).await?;
         let currency = Currency::get_for_id(pool, &currency_id).await?;
@@ -555,9 +557,12 @@ impl Mutation {
             None,
             &currency_id,
             note,
-            image_id,
+            image_id.clone(),
         )
         .await?;
+        if let Some(image_id) = image_id {
+            s3.move_to_be(&image_id).await?;
+        }
         transaction.commit().await?;
         let _ = self.simplify_cross_group(context, to_user).await;
         if let Some(token) = to_user_model.notification_token {
@@ -682,6 +687,7 @@ impl Mutation {
                 }
             }
         }
+
         transaction.commit().await?;
 
         Ok(splits)
@@ -702,6 +708,7 @@ impl Mutation {
             .as_authorized_user()
             .ok_or(anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
+        let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;
         let currency = Currency::get_for_id(pool, &currency_id).await?;
 
         let with_user_model = User::get_from_id(&with_user, pool).await?;
@@ -749,6 +756,9 @@ impl Mutation {
                 )
             }
         }
+        if let Some(image_id) = &image_id {
+            s3.move_to_be(image_id).await?;
+        }
         transaction.commit().await?;
 
         if remaining_amount > 0 {
@@ -787,10 +797,13 @@ impl Mutation {
                     None,
                     &currency_id,
                     note,
-                    image_id,
+                    image_id.clone(),
                 )
                 .await?,
             );
+            if let Some(image_id) = image_id {
+                s3.move_to_be(&image_id).await?;
+            }
             transaction.commit().await?;
         }
         let _ = self.simplify_cross_group(context, with_user).await;
