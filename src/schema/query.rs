@@ -879,7 +879,7 @@ impl Query {
         Ok(s3.get_public_url(&id))
     }
 
-    pub async fn expense_summary_by_category_for_group<'ctx>(&self, context: &Context<'ctx>, group_id: String) -> anyhow::Result<HashMap<String,i64>>{
+    pub async fn expense_summary_by_category_for_group<'ctx>(&self, context: &Context<'ctx>, group_id: String) -> anyhow::Result<Vec<CategorisedAmount>>{
         let user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
@@ -898,10 +898,12 @@ LEFT JOIN split_transactions AS st ON st.expense_id = e.id AND st.group_id = $2 
 WHERE u.id = $1
 GROUP BY u.id;
         ",user.id, group_id).fetch_all(pool).await?;
-        let mut categorised_amount = HashMap::new();
+        let mut categorised_amount = Vec::new();
         for rec in data {
             if let Some(category) = rec.category{
-                *categorised_amount.entry(category).or_insert(0) += rec.total_spent.unwrap_or_default();
+                categorised_amount.push(
+                    CategorisedAmount { category, amount: rec.total_spent.unwrap_or_default() }
+                );
             }
         }
         Ok(categorised_amount)
@@ -1027,4 +1029,10 @@ pub struct Registered<'a> {
 pub struct ExpenseMixSplit {
     pub expense: Option<Expense>,
     pub split: Option<Split>,
+}
+
+#[derive(SimpleObject)]
+pub struct CategorisedAmount{
+    pub category: String,
+    pub amount: i64,
 }
