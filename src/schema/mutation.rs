@@ -774,7 +774,9 @@ impl Mutation {
                     let group = Group::create_group(&id, &self_user.id, None, pool).await?;
                     let futures = FuturesUnordered::new();
                     for user_id in user_ids.iter() {
-                        futures.push(Group::add_to_group(&group.id, user_id.as_str(), pool))
+                        if user_id != &self_user.id {
+                            futures.push(Group::add_to_group(&group.id, user_id.as_str(), pool))
+                        }
                     }
                     let result = futures.collect::<Vec<_>>().await;
                     if let Some(err) = result.iter().find(|v| v.is_err()) {
