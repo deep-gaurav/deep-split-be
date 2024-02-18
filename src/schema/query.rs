@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_graphql::{Context, Object, SimpleObject, Union};
 
 use sqlx::SqlitePool;
@@ -875,6 +877,34 @@ impl Query {
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;
         Ok(s3.get_public_url(&id))
+    }
+
+    pub async fn expense_summary_by_category_for_group<'ctx>(&self, context: &Context<'ctx>, group_id: String) -> anyhow::Result<HashMap<String,i64>>{
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+        let data = sqlx::query!(r"
+SELECT u.id, e.category,
+ CASE WHEN e.created_by=u.id THEN e.amount ELSE 0 END +SUM(CASE WHEN st.to_user = u.id THEN -st.amount
+      ELSE COALESCE(st.amount,0)
+    END) AS total_spent
+FROM users AS u
+LEFT JOIN expenses AS e ON e.created_by = u.id AND e.group_id = $2
+OR e.id IN (SELECT expense_id FROM split_transactions WHERE from_user = u.id AND group_id = $2)
+LEFT JOIN split_transactions AS st ON st.expense_id = e.id AND st.group_id = $2 AND (st.from_user=$1 OR st.to_user=$1)
+WHERE u.id = $1
+GROUP BY u.id;
+        ",user.id, group_id).fetch_all(pool).await?;
+        let mut categorised_amount = HashMap::new();
+        for rec in data {
+            if let Some(category) = rec.category{
+                *categorised_amount.entry(category).or_insert(0) += rec.total_spent.unwrap_or_default();
+            }
+        }
+        Ok(categorised_amount)
     }
 }
 
