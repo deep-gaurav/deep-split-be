@@ -879,7 +879,7 @@ impl Query {
         Ok(s3.get_public_url(&id))
     }
 
-    pub async fn expense_summary_by_category_for_group<'ctx>(&self, context: &Context<'ctx>, group_id: String) -> anyhow::Result<Vec<CategorisedAmount>>{
+    pub async fn expense_summary_by_category<'ctx>(&self, context: &Context<'ctx>, group_id: Option<String>, from_time: String) -> anyhow::Result<Vec<CategorisedAmount>>{
         let user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
@@ -887,17 +887,17 @@ impl Query {
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
         let data = sqlx::query!(r"
-SELECT u.id, e.category,
- CASE WHEN e.created_by=u.id THEN e.amount ELSE 0 END +SUM(CASE WHEN st.to_user = u.id THEN -st.amount
-      ELSE COALESCE(st.amount,0)
-    END) AS total_spent
-FROM users AS u
-LEFT JOIN expenses AS e ON e.created_by = u.id AND e.group_id = $2
-OR e.id IN (SELECT expense_id FROM split_transactions WHERE from_user = u.id AND group_id = $2)
-LEFT JOIN split_transactions AS st ON st.expense_id = e.id AND st.group_id = $2 AND (st.from_user=$1 OR st.to_user=$1)
-WHERE u.id = $1
-GROUP BY u.id, e.category;
-        ",user.id, group_id).fetch_all(pool).await?;
+        SELECT u.id, e.category,
+        CASE WHEN e.created_by=u.id THEN e.amount ELSE 0 END +SUM(CASE WHEN st.to_user = u.id THEN -st.amount
+             ELSE COALESCE(st.amount,0)
+           END) AS total_spent
+       FROM users AS u
+       LEFT JOIN expenses AS e ON e.created_by = u.id AND (e.group_id = $2 OR $2 IS NULL) AND e.created_at > $3
+       OR e.id IN (SELECT expense_id FROM split_transactions WHERE from_user = u.id AND (group_id = $2 OR $2 IS NULL) AND created_at > $3)
+       LEFT JOIN split_transactions AS st ON st.expense_id = e.id AND (st.group_id = $2 OR $2 IS NULL) AND (st.from_user=$1 OR st.to_user=$1)
+       WHERE u.id = $1
+       GROUP BY u.id, e.category;
+        ",user.id, group_id, from_time).fetch_all(pool).await?;
         let mut categorised_amount = Vec::new();
         for rec in data {
             if let Some(category) = rec.category{
