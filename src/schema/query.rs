@@ -890,19 +890,20 @@ impl Query {
         SELECT u.id, e.category,
         CASE WHEN e.created_by=u.id THEN e.amount ELSE 0 END +SUM(CASE WHEN st.to_user = u.id THEN -st.amount
              ELSE COALESCE(st.amount,0)
-           END) AS total_spent
+           END) AS total_spent, 
+           e.currency_id
        FROM users AS u
        LEFT JOIN expenses AS e ON e.created_by = u.id AND (e.group_id = $2 OR $2 IS NULL) AND e.created_at > $3
        OR e.id IN (SELECT expense_id FROM split_transactions WHERE from_user = u.id AND (group_id = $2 OR $2 IS NULL) AND created_at > $3)
        LEFT JOIN split_transactions AS st ON st.expense_id = e.id AND (st.group_id = $2 OR $2 IS NULL) AND (st.from_user=$1 OR st.to_user=$1)
        WHERE u.id = $1
-       GROUP BY u.id, e.category;
+       GROUP BY u.id, e.category, e.currency_id;
         ",user.id, group_id, from_time).fetch_all(pool).await?;
         let mut categorised_amount = Vec::new();
         for rec in data {
-            if let Some(category) = rec.category{
+            if let (Some(category),Some(currency_id)) = (rec.category,rec.currency_id){
                 categorised_amount.push(
-                    CategorisedAmount { category, amount: rec.total_spent.unwrap_or_default() }
+                    CategorisedAmount { category, amount: Amount { amount: rec.total_spent.unwrap_or_default(), currency_id } }
                 );
             }
         }
@@ -1034,5 +1035,5 @@ pub struct ExpenseMixSplit {
 #[derive(SimpleObject)]
 pub struct CategorisedAmount{
     pub category: String,
-    pub amount: i64,
+    pub amount: Amount,
 }
