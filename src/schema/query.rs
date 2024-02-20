@@ -82,38 +82,56 @@ impl Query {
         Ok(user)
     }
 
-    pub async fn expense_by_id<'ctx>(&self, context: &Context<'ctx>, id: String) -> anyhow::Result<Expense>{
+    pub async fn expense_by_id<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        id: String,
+    ) -> anyhow::Result<Expense> {
         let _user = context
-        .data::<AuthTypes>()
-        .map_err(|e| anyhow::anyhow!("{e:#?}"))?
-        .as_authorized_user()
-        .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool: &sqlx::Pool<sqlx::Sqlite> = get_pool_from_context(context).await?;
-        
+
         let expense = Expense::get_from_id(&id, pool).await?;
         Ok(expense)
     }
 
-    pub async fn split_by_id<'ctx>(&self, context: &Context<'ctx>, id:String) -> anyhow::Result<Split>{
+    pub async fn split_by_id<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        id: String,
+    ) -> anyhow::Result<Split> {
         let _user = context
-        .data::<AuthTypes>()
-        .map_err(|e| anyhow::anyhow!("{e:#?}"))?
-        .as_authorized_user()
-        .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool: &sqlx::Pool<sqlx::Sqlite> = get_pool_from_context(context).await?;
-        
+
         let split = Split::get_from_id(&id, pool).await?;
         Ok(split)
     }
 
-    pub async fn splits_by_part<'ctx>(&self, context: &Context<'ctx>, part_id:String) -> anyhow::Result<Vec<Split>>{
+    pub async fn splits_by_part<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        part_id: String,
+    ) -> anyhow::Result<Vec<Split>> {
         let _user = context
-        .data::<AuthTypes>()
-        .map_err(|e| anyhow::anyhow!("{e:#?}"))?
-        .as_authorized_user()
-        .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool: &sqlx::Pool<sqlx::Sqlite> = get_pool_from_context(context).await?;
-        let split = sqlx::query_as!(Split, "SELECT * FROM split_transactions WHERE part_transaction = $1", part_id).fetch_all(pool).await?;
+        let split = sqlx::query_as!(
+            Split,
+            "SELECT * FROM split_transactions WHERE part_transaction = $1",
+            part_id
+        )
+        .fetch_all(pool)
+        .await?;
         Ok(split)
     }
 
@@ -145,10 +163,10 @@ impl Query {
         let users = sqlx::query_as!(
             User,
             r#"
-            SELECT DISTINCT users.* FROM users 
+            SELECT DISTINCT users.* FROM users
                 JOIN group_memberships ON group_memberships.user_id = users.id
-                
-            WHERE group_memberships.group_id IN (SELECT groups.id FROM 
+
+            WHERE group_memberships.group_id IN (SELECT groups.id FROM
                 users JOIN group_memberships ON users.id=group_memberships.user_id AND users.id=$1
                 JOIN groups ON group_memberships.group_id=groups.id)
         "#,
@@ -207,17 +225,17 @@ impl Query {
             Amount,
             "
             SELECT currency_id,SUM(net_owed_amount) as amount FROM (
-                SELECT 
+                SELECT
                     from_user,
                     to_user,
                     currency_id,
                     SUM(CASE WHEN from_user = $1 THEN amount ELSE -amount END) AS net_owed_amount
-                FROM 
+                FROM
                     split_transactions
-                WHERE 
-                    (from_user = $1) OR 
+                WHERE
+                    (from_user = $1) OR
                     (to_user = $1)
-                GROUP BY 
+                GROUP BY
                     from_user, to_user, currency_id
             ) GROUP BY currency_id
         ",
@@ -241,23 +259,24 @@ impl Query {
             .as_authorized_user()
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
-        let direct_group =
-        Group::find_group_for_users(
-            if with_user!=user.id {
+        let direct_group = Group::find_group_for_users(
+            if with_user != user.id {
                 vec![with_user.to_string(), user.id.to_string()]
-            }
-            else {
+            } else {
                 vec![with_user.to_string()]
             },
-            pool
-        ).await.ok().and_then(|group|
-        if group.name.is_none(){
-            Some(group.id)
-        }else{
-            None
-        }
-        );
-        let splits = 
+            pool,
+        )
+        .await
+        .ok()
+        .and_then(|group| {
+            if group.name.is_none() {
+                Some(group.id)
+            } else {
+                None
+            }
+        });
+        let splits =
             sqlx::query!(
                 r#"
                 WITH expenses_left_join AS (
@@ -317,7 +336,7 @@ impl Query {
                     FROM split_transactions st
                     LEFT JOIN expenses e ON st.expense_id = e.id
                     WHERE ((st.to_user = $1 AND st.from_user = $2) OR (st.from_user = $1 AND st.to_user = $2)))
-                    
+
                     SELECT *
                     FROM (
                       SELECT *
@@ -327,9 +346,9 @@ impl Query {
                       FROM split_transactions_right_join
                       WHERE expense_id IS NULL
                     )
-                    WHERE (COALESCE(expense_created_at, split_transaction_created_at) < $5 OR $5 IS NULL)
+                    WHERE (COALESCE(expense_created_at, split_transaction_created_at) <= $5 OR $5 IS NULL)
                     ORDER BY COALESCE(expense_created_at, split_transaction_created_at) DESC
-                    LIMIT $4            
+                    LIMIT $4
                 "#,
                 user.id,
                 with_user,
@@ -403,7 +422,7 @@ impl Query {
                 "
                 SELECT * from split_transactions WHERE
                 ((from_user = $1 AND to_user = $2) OR (from_user = $2 AND to_user = $1))
-                AND created_at < $4
+                AND created_at <= $4
                 ORDER BY created_at DESC LIMIT $3
                 ",
                 user.id,
@@ -456,7 +475,7 @@ impl Query {
                 SELECT * from split_transactions WHERE
                 (from_user = $1  OR to_user = $1)
                 AND group_id = $2
-                AND created_at < $4
+                AND created_at <= $4
                 ORDER BY created_at DESC LIMIT $3
                 ",
                 user.id,
@@ -500,7 +519,7 @@ impl Query {
 
         let rows = sqlx::query!(
             r#"
-            SELECT 
+            SELECT
                 st.id AS transaction_id,
                 st.amount AS transaction_amount,
                 st.currency_id AS transaction_currency,
@@ -524,16 +543,16 @@ impl Query {
                 e.category as expense_category,
                 e.note AS expense_note,
                 e.image_id AS expense_image_id
-            FROM 
+            FROM
                 split_transactions st
-            LEFT JOIN 
+            LEFT JOIN
                 expenses e ON st.expense_id = e.id
-            WHERE 
+            WHERE
                 (st.from_user = $1 OR st.to_user = $1)
                 AND (st.created_at <= $2 OR $2 IS NULL)
-            ORDER BY 
+            ORDER BY
                 st.created_at DESC
-            LIMIT 
+            LIMIT
                 $3;
             "#,
             user.id,
@@ -657,7 +676,7 @@ impl Query {
                     WHERE st.to_user = $1 OR st.from_user = $1
                         AND st.group_id = $2
                     )
-                    
+
                     SELECT *
                     FROM (
                       SELECT *
@@ -667,9 +686,9 @@ impl Query {
                       FROM split_transactions_right_join
                       WHERE expense_id IS NULL
                     )
-                    WHERE COALESCE(expense_created_at, split_transaction_created_at) < $4  
+                    WHERE COALESCE(expense_created_at, split_transaction_created_at) <= $4
                     ORDER BY COALESCE(expense_created_at, split_transaction_created_at) DESC
-                    LIMIT $3            
+                    LIMIT $3
                 "#,
                 user.id,
                 with_group,
@@ -782,7 +801,7 @@ impl Query {
                     WHERE (st.to_user = $1 OR st.from_user = $1)
                         AND st.group_id = $2
                     )
-                    
+
                     SELECT *
                     FROM (
                       SELECT *
@@ -793,7 +812,7 @@ impl Query {
                       WHERE expense_id IS NULL
                     )
                     ORDER BY COALESCE(expense_created_at, split_transaction_created_at) DESC
-                    LIMIT $3            
+                    LIMIT $3
                 "#,
                 user.id,
                 with_group,
@@ -879,7 +898,12 @@ impl Query {
         Ok(s3.get_public_url(&id))
     }
 
-    pub async fn expense_summary_by_category<'ctx>(&self, context: &Context<'ctx>, group_id: Option<String>, from_time: String) -> anyhow::Result<Vec<CategorisedAmount>>{
+    pub async fn expense_summary_by_category<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        group_id: Option<String>,
+        from_time: String,
+    ) -> anyhow::Result<Vec<CategorisedAmount>> {
         let user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
@@ -887,25 +911,25 @@ impl Query {
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
         let data = sqlx::query!(r"
-        SELECT u.id, e.category,
-        CASE WHEN e.created_by=u.id THEN e.amount ELSE 0 END +SUM(CASE WHEN st.to_user = u.id THEN -st.amount
-             ELSE COALESCE(st.amount,0)
-           END) AS total_spent, 
-           e.currency_id
-       FROM users AS u
-       LEFT JOIN expenses AS e ON e.created_by = u.id AND (e.group_id = $2 OR $2 IS NULL) AND e.created_at > $3
-       OR e.id IN (SELECT expense_id FROM split_transactions WHERE from_user = u.id AND (group_id = $2 OR $2 IS NULL) AND created_at > $3)
-       LEFT JOIN split_transactions AS st ON st.expense_id = e.id AND (st.group_id = $2 OR $2 IS NULL) AND (st.from_user=$1 OR st.to_user=$1)
-       WHERE u.id = $1
-       GROUP BY u.id, e.category, e.currency_id;
+            SELECT SUM(total_spent) AS total_final_spent, category, currency_id FROM (
+             SELECT  CASE WHEN e.created_by=$1 THEN e.amount ELSE 0 END +SUM(CASE WHEN st.to_user = $1 THEN -st.amount
+                         ELSE COALESCE(st.amount,0)
+                       END) AS total_spent, e.id, e.category AS category, e.currency_id AS currency_id
+             FROM expenses AS e
+             LEFT JOIN split_transactions AS st ON st.expense_id = e.id
+             WHERE (e.group_id = $2 OR $2 IS NULL) AND (e.created_by = $1 OR st.from_user = $1) AND (e.created_at >= $3)
+             GROUP BY e.id
+            ) GROUP BY category, currency_id
         ",user.id, group_id, from_time).fetch_all(pool).await?;
         let mut categorised_amount = Vec::new();
         for rec in data {
-            if let (Some(category),Some(currency_id)) = (rec.category,rec.currency_id){
-                categorised_amount.push(
-                    CategorisedAmount { category, amount: Amount { amount: rec.total_spent.unwrap_or_default(), currency_id } }
-                );
-            }
+            categorised_amount.push(CategorisedAmount {
+                category: rec.category,
+                amount: Amount {
+                    amount: rec.total_final_spent.unwrap_or_default(),
+                    currency_id: rec.currency_id,
+                },
+            });
         }
         Ok(categorised_amount)
     }
@@ -971,7 +995,7 @@ impl Query {
                     )
                     SELECT *
                     FROM all_expenses
-                    WHERE created_at < $4
+                    WHERE created_at <= $4
                     ORDER BY created_at DESC
                     LIMIT $3
                     "#,
@@ -994,7 +1018,7 @@ impl Query {
     JOIN split_transactions s ON e.id = s.expense_id
     WHERE ((s.from_user = $1 AND s.to_user = $2)
     OR (s.from_user = $2 AND s.to_user = $1))
-    AND s.created_at < $4
+    AND s.created_at <= $4
     ORDER BY created_at DESC LIMIT $3
                 "#,
                 user_1,
@@ -1033,7 +1057,7 @@ pub struct ExpenseMixSplit {
 }
 
 #[derive(SimpleObject)]
-pub struct CategorisedAmount{
+pub struct CategorisedAmount {
     pub category: String,
     pub amount: Amount,
 }
