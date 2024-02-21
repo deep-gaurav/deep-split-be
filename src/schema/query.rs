@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, default};
 
 use async_graphql::{Context, Object, SimpleObject, Union};
 
@@ -250,7 +250,7 @@ impl Query {
         &self,
         context: &Context<'ctx>,
         with_user: String,
-        from_time: Option<String>,
+        #[graphql(default)] skip: u32,
         limit: u32,
     ) -> anyhow::Result<Vec<ExpenseMixSplit>> {
         let user = context
@@ -346,15 +346,15 @@ impl Query {
                       FROM split_transactions_right_join
                       WHERE expense_id IS NULL
                     )
-                    WHERE (COALESCE(expense_created_at, split_transaction_created_at) <= $5 OR $5 IS NULL)
                     ORDER BY COALESCE(expense_created_at, split_transaction_created_at) DESC
                     LIMIT $4
+                    OFFSET $5
                 "#,
                 user.id,
                 with_user,
                 direct_group,
                 limit,
-                from_time
+                skip
             )
             .fetch_all(pool)
             .await?
@@ -407,7 +407,7 @@ impl Query {
         &self,
         context: &Context<'ctx>,
         with_user: String,
-        from_time: Option<String>,
+        #[graphql(default)] skip: u32,
         limit: u32,
     ) -> anyhow::Result<Vec<Split>> {
         let user = context
@@ -416,37 +416,22 @@ impl Query {
             .as_authorized_user()
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
-        let splits = if let Some(from_tile) = from_time {
-            sqlx::query_as!(
-                Split,
-                "
+        let splits = sqlx::query_as!(
+            Split,
+            "
                 SELECT * from split_transactions WHERE
                 ((from_user = $1 AND to_user = $2) OR (from_user = $2 AND to_user = $1))
-                AND created_at <= $4
                 ORDER BY created_at DESC LIMIT $3
+                OFFSET $4
                 ",
-                user.id,
-                with_user,
-                limit,
-                from_tile
-            )
-            .fetch_all(pool)
-            .await?
-        } else {
-            sqlx::query_as!(
-                Split,
-                "
-                SELECT * from split_transactions WHERE
-                (from_user = $1 AND to_user = $2) OR (from_user = $2 AND to_user = $1)
-                ORDER BY created_at DESC LIMIT $3
-                ",
-                user.id,
-                with_user,
-                limit,
-            )
-            .fetch_all(pool)
-            .await?
-        };
+            user.id,
+            with_user,
+            limit,
+            skip
+        )
+        .fetch_all(pool)
+        .await?;
+
         Ok(splits)
     }
 
@@ -459,7 +444,7 @@ impl Query {
         &self,
         context: &Context<'ctx>,
         with_group: String,
-        from_time: Option<String>,
+        #[graphql(default)] skip: u32,
         limit: u32,
     ) -> anyhow::Result<Vec<Split>> {
         let user = context
@@ -468,47 +453,30 @@ impl Query {
             .as_authorized_user()
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
-        let splits = if let Some(from_tile) = from_time {
-            sqlx::query_as!(
-                Split,
-                "
-                SELECT * from split_transactions WHERE
-                (from_user = $1  OR to_user = $1)
-                AND group_id = $2
-                AND created_at <= $4
-                ORDER BY created_at DESC LIMIT $3
-                ",
-                user.id,
-                with_group,
-                limit,
-                from_tile
-            )
-            .fetch_all(pool)
-            .await?
-        } else {
-            sqlx::query_as!(
-                Split,
-                "
+        let splits = sqlx::query_as!(
+            Split,
+            "
                 SELECT * from split_transactions WHERE
                 (from_user = $1  OR to_user = $1)
                 AND group_id = $2
                 ORDER BY created_at DESC LIMIT $3
+                OFFSET $4
                 ",
-                user.id,
-                with_group,
-                limit,
-            )
-            .fetch_all(pool)
-            .await?
-        };
+            user.id,
+            with_group,
+            limit,
+            skip
+        )
+        .fetch_all(pool)
+        .await?;
         Ok(splits)
     }
 
     pub async fn get_transactions<'ctx>(
         &self,
         context: &Context<'ctx>,
-        from_time: Option<String>,
         limit: u32,
+        #[graphql(default)] skip: u32,
     ) -> anyhow::Result<Vec<ExpenseMixSplit>> {
         let user = context
             .data::<AuthTypes>()
@@ -549,14 +517,13 @@ impl Query {
                 expenses e ON st.expense_id = e.id
             WHERE
                 (st.from_user = $1 OR st.to_user = $1)
-                AND (st.created_at <= $2 OR $2 IS NULL)
             ORDER BY
                 st.created_at DESC
-            LIMIT
-                $3;
+            LIMIT $3
+            OFFSET $2;
             "#,
             user.id,
-            from_time,
+            skip,
             limit
         )
         .fetch_all(pool)
@@ -605,8 +572,8 @@ impl Query {
         &self,
         context: &Context<'ctx>,
         with_group: String,
-        from_time: Option<String>,
         limit: u32,
+        #[graphql(default)] skip: u32,
     ) -> anyhow::Result<Vec<ExpenseMixSplit>> {
         let user = context
             .data::<AuthTypes>()
@@ -614,7 +581,7 @@ impl Query {
             .as_authorized_user()
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
-        let splits = if let Some(from_tile) = from_time {
+        let splits =
             sqlx::query!(
                 r#"
                 WITH expenses_left_join AS (
@@ -686,14 +653,14 @@ impl Query {
                       FROM split_transactions_right_join
                       WHERE expense_id IS NULL
                     )
-                    WHERE COALESCE(expense_created_at, split_transaction_created_at) <= $4
                     ORDER BY COALESCE(expense_created_at, split_transaction_created_at) DESC
                     LIMIT $3
+                    OFFSET $4
                 "#,
                 user.id,
                 with_group,
                 limit,
-                from_tile
+                skip
             )
             .fetch_all(pool)
             .await?
@@ -738,131 +705,7 @@ impl Query {
                     ExpenseMixSplit { expense, split}
                 }
             ).collect()
-        } else {
-            sqlx::query!(
-                r#"
-                WITH expenses_left_join AS (
-                    SELECT
-                        st.id AS split_transaction_id,
-                        st.amount AS split_transaction_amount,
-                        st.from_user as split_transaction_from_user,
-                        st.to_user as split_transaction_to_user,
-                        st.transaction_type as split_transaction_transaction_type,
-                        st.part_transaction as split_transaction_part_transaction,
-                        st.created_at AS split_transaction_created_at,
-                        st.created_by AS split_transaction_created_by,
-                        st.group_id AS split_transaction_group_id,
-                        st.with_group_id AS split_transaction_with_group_id,
-                        st.currency_id AS split_transaction_currency_id,
-                        st.note AS split_transaction_note,
-                        st.image_id AS split_transaction_image_id,
-                        e.id AS expense_id,
-                        e.title as expense_title,
-                        e.created_at as expense_created_at,
-                        e.created_by as expense_created_by,
-                        e.group_id as expense_group_id,
-                        e.amount as expense_amount,
-                        e.currency_id as expense_currency_id,
-                        e.category as expense_category,
-                        e.note AS expense_note,
-                        e.image_id AS expense_image_id
-                    FROM expenses e
-                    LEFT JOIN split_transactions st ON st.expense_id = e.id AND (st.to_user = $1 OR st.from_user = $1)
-                    WHERE e.group_id = $2
-                    ),
-                    split_transactions_right_join AS (
-                    SELECT
-                        st.id AS split_transaction_id,
-                        st.amount AS split_transaction_amount,
-                        st.from_user as split_transaction_from_user,
-                        st.to_user as split_transaction_to_user,
-                        st.transaction_type as split_transaction_transaction_type,
-                        st.part_transaction as split_transaction_part_transaction,
-                        st.created_at AS split_transaction_created_at,
-                        st.created_by AS split_transaction_created_by,
-                        st.group_id AS split_transaction_group_id,
-                        st.with_group_id AS split_transaction_with_group_id,
-                        st.currency_id AS split_transaction_currency_id,
-                        st.note AS split_transaction_note,
-                        st.image_id AS split_transaction_image_id,
-                        e.id AS expense_id,
-                        e.title as expense_title,
-                        e.created_at as expense_created_at,
-                        e.created_by as expense_created_by,
-                        e.group_id as expense_group_id,
-                        e.amount as expense_amount,
-                        e.currency_id as expense_currency_id,
-                        e.category as expense_category,
-                        e.note AS expense_note,
-                        e.image_id AS expense_image_id
-
-                    FROM split_transactions st
-                    LEFT JOIN expenses e ON st.expense_id = e.id
-                    WHERE (st.to_user = $1 OR st.from_user = $1)
-                        AND st.group_id = $2
-                    )
-
-                    SELECT *
-                    FROM (
-                      SELECT *
-                      FROM expenses_left_join
-                      UNION ALL
-                      SELECT *
-                      FROM split_transactions_right_join
-                      WHERE expense_id IS NULL
-                    )
-                    ORDER BY COALESCE(expense_created_at, split_transaction_created_at) DESC
-                    LIMIT $3
-                "#,
-                user.id,
-                with_group,
-                limit,
-            )
-            .fetch_all(pool)
-            .await?
-            .into_iter()
-            .map(|row|{
-                    let expense = if let Some(expense_id)=row.expense_id.clone(){
-                        Some(Expense{
-                            id: expense_id,
-                            currency_id: row.expense_currency_id.unwrap(),
-                            title: row.expense_title.unwrap(),
-                            created_at: row.expense_created_at.unwrap(),
-                            created_by: row.expense_created_by.unwrap(),
-                            group_id: row.expense_group_id.unwrap(),
-                            amount: row.expense_amount.unwrap(),
-                            category: row.expense_category.unwrap(),
-                            note: row.expense_note,
-                            image_id: row.expense_image_id,
-                        })
-                    }else{
-                        None
-                    };
-                    let split = if let Some(split_id)=row.split_transaction_id{
-                        Some(Split{
-                            id:split_id,
-                            amount:row.split_transaction_amount.unwrap(),
-                            currency_id: row.split_transaction_currency_id.unwrap(),
-                            expense_id:row.expense_id,
-                            group_id:row.split_transaction_group_id.unwrap(),
-                            from_user: row.split_transaction_from_user.unwrap(),
-                            to_user: row.split_transaction_to_user.unwrap(),
-                            part_transaction: row.split_transaction_part_transaction,
-                            transaction_type:row.split_transaction_transaction_type.unwrap(),
-                            created_at:row.split_transaction_created_at.unwrap(),
-                            created_by: row.split_transaction_created_by.unwrap(),
-                            with_group_id: row.split_transaction_with_group_id,
-                            image_id: row.split_transaction_image_id,
-                            note: row.split_transaction_note,
-                        })
-                    }else{
-                        None
-                    };
-                    ExpenseMixSplit { expense, split}
-
-                }
-            ).collect()
-        };
+            ;
 
         Ok(splits)
     }
@@ -960,11 +803,10 @@ impl Query {
     pub async fn get_expenses_with_user(
         user_1: &str,
         user_2: &str,
-        from_time: Option<String>,
+        skip: u32,
         limit: u32,
         pool: &SqlitePool,
     ) -> anyhow::Result<Vec<Expense>> {
-        let from_time = from_time.unwrap_or(chrono::Utc::now().to_rfc3339());
         let direct_group =
             Group::find_group_for_users(vec![user_1.to_string(), user_2.to_string()], pool).await;
         log::info!("Found group with user");
@@ -995,14 +837,14 @@ impl Query {
                     )
                     SELECT *
                     FROM all_expenses
-                    WHERE created_at <= $4
                     ORDER BY created_at DESC
                     LIMIT $3
+                    OFFSET $4
                     "#,
                     user_1,
                     user_2,
                     limit,
-                    from_time,
+                    skip,
                     direct_group.id,
                 )
                 .fetch_all(pool)
@@ -1018,13 +860,12 @@ impl Query {
     JOIN split_transactions s ON e.id = s.expense_id
     WHERE ((s.from_user = $1 AND s.to_user = $2)
     OR (s.from_user = $2 AND s.to_user = $1))
-    AND s.created_at <= $4
-    ORDER BY created_at DESC LIMIT $3
+    ORDER BY created_at DESC LIMIT $3 OFFSET $4
                 "#,
                 user_1,
                 user_2,
                 limit,
-                from_time
+                skip
             )
             .fetch_all(pool)
             .await?;
