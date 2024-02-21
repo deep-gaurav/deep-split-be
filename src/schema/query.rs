@@ -1,4 +1,3 @@
-use std::{collections::HashMap, default};
 
 use async_graphql::{Context, Object, SimpleObject, Union};
 
@@ -640,7 +639,7 @@ impl Query {
                         e.image_id AS expense_image_id
                     FROM split_transactions st
                     LEFT JOIN expenses e ON st.expense_id = e.id
-                    WHERE st.to_user = $1 OR st.from_user = $1
+                    WHERE (st.to_user = $1 OR st.from_user = $1)
                         AND st.group_id = $2
                     )
 
