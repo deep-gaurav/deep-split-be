@@ -48,6 +48,7 @@ impl Mutation {
     pub async fn send_email_otp<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(email))]
         email: String,
     ) -> anyhow::Result<bool> {
         let otp_map = context
@@ -76,7 +77,9 @@ impl Mutation {
     pub async fn verify_otp<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(email))]        
         email: String,
+        #[graphql(validator(max_length=6))]        
         otp: String,
     ) -> anyhow::Result<AuthResult> {
         let pool = get_pool_from_context(context).await?;
@@ -115,7 +118,7 @@ impl Mutation {
         }
     }
 
-    pub async fn refresh_token(&self, refresh_token: String) -> anyhow::Result<UserSignedUp> {
+    pub async fn refresh_token(&self, #[graphql(validator(max_length=8000))] refresh_token: String) -> anyhow::Result<UserSignedUp> {
         let claims = decode_refresh_token(&refresh_token)?;
         let new_token = create_tokens(claims.user_id, claims.email, claims.phone_number)?;
         if let AuthResult::UserSignedUp(tokens) = new_token {
@@ -128,8 +131,8 @@ impl Mutation {
     pub async fn signup<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(regex=r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",min_length=3,max_length=20))]
         name: String,
-        upi_id: Option<String>,
     ) -> anyhow::Result<SignupSuccess> {
         let auth_type = context
             .data::<AuthTypes>()
@@ -164,7 +167,7 @@ impl Mutation {
                             &name,
                             claims.phone_number.clone(),
                             claims.email.clone(),
-                            upi_id,
+                            None,
                             currency_id,
                             pool,
                         )
@@ -191,6 +194,7 @@ impl Mutation {
     pub async fn create_group<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(regex=r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",min_length=3,max_length=20))]
         name: String,
     ) -> anyhow::Result<Group> {
         let auth_type = context
@@ -213,6 +217,7 @@ impl Mutation {
     pub async fn set_notification_token<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(max_length=8000))]
         token: String,
     ) -> anyhow::Result<String> {
         let self_user = context
@@ -234,7 +239,9 @@ impl Mutation {
     pub async fn add_to_group_by_email<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(max_length=100))]
         group_id: String,
+        #[graphql(validator(email))]
         email: String,
     ) -> anyhow::Result<&str> {
         let auth_type = context
@@ -304,13 +311,18 @@ impl Mutation {
     pub async fn add_non_group_expense<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(regex=r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",min_length=3,max_length=20))]
         title: String,
         amount: i64,
+        #[graphql(validator(max_length=100))]
         currency_id: String,
         splits: Vec<SplitInputNonGroup>,
+        #[graphql(validator(max_length=300))]
         note: Option<String>,
+        #[graphql(validator(max_length=100))]
         image_id: Option<String>,
-        #[graphql(default = "\"MISC\".to_string()")] category: String,
+        #[graphql(default = "\"MISC\".to_string()",validator(max_length=100))]
+        category: String,
     ) -> anyhow::Result<NonGroupExpense> {
         let auth_type = context
             .data::<AuthTypes>()
@@ -418,14 +430,19 @@ impl Mutation {
     pub async fn add_expense<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(max_length=100))]
         group_id: String,
+        #[graphql(validator(regex=r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",min_length=3,max_length=20))]
         title: String,
         amount: i64,
+        #[graphql(validator(max_length=100))]
         currency_id: String,
         splits: Vec<SplitInput>,
+        #[graphql(validator(max_length=300))]
         note: Option<String>,
+        #[graphql(validator(max_length=100))]
         image_id: Option<String>,
-        #[graphql(default = "\"MISC\".to_string()")] category: String,
+        #[graphql(default = "\"MISC\".to_string()",validator(max_length=100))] category: String,
     ) -> anyhow::Result<Expense> {
         let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;
 
@@ -520,11 +537,16 @@ impl Mutation {
     pub async fn settle_in_group<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(max_length=100))]
         to_user: String,
+        #[graphql(validator(max_length=100))]
         group_id: String,
         amount: i64,
+        #[graphql(validator(max_length=100))]
         currency_id: String,
+        #[graphql(validator(max_length=100))]
         image_id: Option<String>,
+        #[graphql(validator(max_length=300))]
         note: Option<String>,
     ) -> anyhow::Result<Split> {
         let self_user = context
@@ -602,6 +624,7 @@ impl Mutation {
     pub async fn simplify_cross_group<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(max_length=100))]
         with_user: String,
     ) -> anyhow::Result<Vec<Split>> {
         let self_user = context
@@ -696,10 +719,14 @@ impl Mutation {
     pub async fn auto_settle_with_user<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(max_length=100))]
         with_user: String,
         amount: i64,
+        #[graphql(validator(max_length=100))]
         currency_id: String,
+        #[graphql(validator(max_length=100))]
         image_id: Option<String>,
+        #[graphql(validator(max_length=300))]
         note: Option<String>,
     ) -> anyhow::Result<Vec<Split>> {
         let self_user = context
@@ -845,6 +872,7 @@ impl Mutation {
     pub async fn set_default_currency<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(max_length=100))]
         currency_id: String,
     ) -> anyhow::Result<UserConfig> {
         let user = context
@@ -867,6 +895,7 @@ impl Mutation {
     pub async fn change_name<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(regex=r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",min_length=3,max_length=20))]
         name: String,
     ) -> anyhow::Result<User> {
         let user = context
@@ -889,9 +918,13 @@ impl Mutation {
     pub async fn convert_currency<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(max_length=100))]
         with_user: String,
+        #[graphql(validator(max_length=100))]
         group_id: String,
+        #[graphql(validator(max_length=100))]
         from_currency_id: String,
+        #[graphql(validator(max_length=100))]
         to_currency_id: String,
     ) -> anyhow::Result<Vec<Split>> {
         let user = context
@@ -1113,18 +1146,23 @@ impl Mutation {
 #[derive(InputObject, Clone)]
 pub struct SplitInput {
     pub amount: i64,
+    #[graphql(validator(max_length=100))]
     pub user_id: String,
 }
 
 #[derive(InputObject)]
 pub struct SplitInputNonGroup {
     pub amount: i64,
+    #[graphql(validator(email))]
     pub email: Option<String>,
+    #[graphql(validator(max_length=100))]
     pub user_id: Option<String>,
 }
 
 #[derive(SimpleObject)]
 pub struct ImageUploadData {
+    #[graphql(validator(max_length=100))]
     id: String,
+    #[graphql(validator(max_length=8000))]
     presigned_url: String,
 }
