@@ -26,7 +26,7 @@ impl Query {
     }
 
     pub async fn min_supported_client(&self) -> &str {
-        "1.5.1+16"
+        "^1.5.1+16"
     }
 
     pub async fn user<'a>(&self, context: &Context<'a>) -> anyhow::Result<UserAuth<'a>> {
