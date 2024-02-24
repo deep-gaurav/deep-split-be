@@ -25,7 +25,7 @@ impl Query {
         "pong".into()
     }
 
-    pub async fn min_supported_client(&self) -> &str {
+    pub async fn supported_client(&self) -> &str {
         "^1.5.1+16"
     }
 
