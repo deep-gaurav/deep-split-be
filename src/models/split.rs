@@ -146,6 +146,10 @@ impl Split {
     pub async fn updated_at(&self) -> &str {
         &self.updated_at
     }
+
+    pub async fn transaction_at(&self) -> &str {
+        &self.transaction_at
+    }
 }
 
 impl Split {
