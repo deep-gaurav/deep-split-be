@@ -1,5 +1,5 @@
 use async_graphql::SimpleObject;
-use futures::future::Map;
+
 use sqlx::SqlitePool;
 
 #[derive(SimpleObject)]

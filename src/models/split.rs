@@ -4,7 +4,7 @@ use async_graphql::{Context, Enum, Object};
 use sqlx::SqlitePool;
 use strum::{Display, EnumString};
 
-use crate::{s3::S3, schema::get_pool_from_context};
+use crate::schema::get_pool_from_context;
 
 use super::{amount::Amount, expense::Expense, group::Group, user::User};
 
@@ -25,6 +25,8 @@ pub struct Split {
 
     pub note: Option<String>,
     pub image_id: Option<String>,
+
+    pub updated_at: String,
 }
 
 #[Object]
@@ -138,6 +140,10 @@ impl Split {
         } else {
             Ok(vec![])
         }
+    }
+
+    pub async fn updated_at(&self) -> &str {
+        &self.updated_at
     }
 }
 

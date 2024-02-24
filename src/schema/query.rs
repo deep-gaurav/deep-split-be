@@ -1,4 +1,3 @@
-
 use async_graphql::{Context, Object, SimpleObject, Union};
 
 use sqlx::SqlitePool;
@@ -24,6 +23,10 @@ pub struct Query;
 impl Query {
     pub async fn ping(&self) -> String {
         "pong".into()
+    }
+
+    pub async fn min_supported_client(&self) -> &str {
+        "1.5.1+16"
     }
 
     pub async fn user<'a>(&self, context: &Context<'a>) -> anyhow::Result<UserAuth<'a>> {
@@ -293,6 +296,7 @@ impl Query {
                         st.currency_id AS split_transaction_currency_id,
                         st.note AS split_transaction_note,
                         st.image_id AS split_transaction_image_id,
+                        st.updated_at AS split_transaction_updated_at,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -302,7 +306,9 @@ impl Query {
                         e.currency_id as expense_currency_id,
                         e.category as expense_category,
                         e.note AS expense_note,
-                        e.image_id AS expense_image_id
+                        e.image_id AS expense_image_id,
+                        e.updated_at AS expense_updated_at,
+                        e.transaction_at AS expense_transaction_at
                     FROM expenses e
                     LEFT JOIN split_transactions st ON st.expense_id = e.id AND (st.to_user = $1 OR st.from_user = $1)
                     WHERE e.group_id = $3
@@ -322,6 +328,7 @@ impl Query {
                         st.currency_id AS split_transaction_currency_id,
                         st.note AS split_transaction_note,
                         st.image_id AS split_transaction_image_id,
+                        st.updated_at AS split_transaction_updated_at,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -331,7 +338,9 @@ impl Query {
                         e.currency_id as expense_currency_id,
                         e.category as expense_category,
                         e.note AS expense_note,
-                        e.image_id AS expense_image_id
+                        e.image_id AS expense_image_id,
+                        e.updated_at AS expense_updated_at,
+                        e.transaction_at AS expense_transaction_at
                     FROM split_transactions st
                     LEFT JOIN expenses e ON st.expense_id = e.id
                     WHERE ((st.to_user = $1 AND st.from_user = $2) OR (st.from_user = $1 AND st.to_user = $2)))
@@ -371,6 +380,8 @@ impl Query {
                             category: row.expense_category.unwrap(),
                             note: row.expense_note,
                             image_id: row.expense_image_id,
+                            updated_at: row.expense_updated_at.unwrap(),
+                            transaction_at: row.expense_transaction_at.unwrap()
                         })
                     }else{
                         None
@@ -391,6 +402,7 @@ impl Query {
                             with_group_id: row.split_transaction_with_group_id,
                             note: row.split_transaction_note,
                             image_id: row.split_transaction_image_id,
+                            updated_at: row.split_transaction_updated_at.unwrap(),
                         })
                     }else{
                         None
@@ -500,6 +512,7 @@ impl Query {
                 st.with_group_id,
                 st.note AS transaction_note,
                 st.image_id AS transaction_image,
+                st.updated_at AS transaction_updated_at,
                 e.id AS expense_id,
                 e.title AS expense_title,
                 e.created_at AS expense_created_at,
@@ -509,7 +522,9 @@ impl Query {
                 e.amount AS expense_amount,
                 e.category as expense_category,
                 e.note AS expense_note,
-                e.image_id AS expense_image_id
+                e.image_id AS expense_image_id,
+                e.updated_at AS expense_updated_at,
+                e.transaction_at AS expense_transaction_at
             FROM
                 split_transactions st
             LEFT JOIN
@@ -541,6 +556,8 @@ impl Query {
                     category: row.expense_category.unwrap(),
                     note: row.expense_note,
                     image_id: row.expense_image_id,
+                    updated_at: row.expense_updated_at.unwrap(),
+                    transaction_at: row.expense_transaction_at.unwrap(),
                 })
             } else {
                 None
@@ -560,6 +577,7 @@ impl Query {
                 with_group_id: row.with_group_id,
                 note: row.transaction_note,
                 image_id: row.transaction_image,
+                updated_at: row.transaction_updated_at,
             }),
         })
         .collect();
@@ -598,6 +616,7 @@ impl Query {
                         st.currency_id AS split_transaction_currency_id,
                         st.note AS split_transaction_note,
                         st.image_id AS split_transaction_image_id,
+                        st.updated_at AS split_transaction_updated_at,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -607,7 +626,9 @@ impl Query {
                         e.currency_id as expense_currency_id,
                         e.category as expense_category,
                         e.note AS expense_note,
-                        e.image_id AS expense_image_id
+                        e.image_id AS expense_image_id,
+                        e.updated_at AS expense_updated_at,
+                        e.transaction_at as expense_transaction_at
                     FROM expenses e
                     LEFT JOIN split_transactions st ON st.expense_id = e.id AND (st.to_user = $1 OR st.from_user = $1)
                     WHERE e.group_id = $2
@@ -627,6 +648,7 @@ impl Query {
                         st.currency_id AS split_transaction_currency_id,
                         st.note AS split_transaction_note,
                         st.image_id AS split_transaction_image_id,
+                        st.updated_at AS split_transaction_updated_at,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -636,7 +658,9 @@ impl Query {
                         e.currency_id as expense_currency_id,
                         e.category as expense_category,
                         e.note AS expense_note,
-                        e.image_id AS expense_image_id
+                        e.image_id AS expense_image_id,
+                        e.updated_at AS expense_updated_at,
+                        e.transaction_at AS expense_transaction_at
                     FROM split_transactions st
                     LEFT JOIN expenses e ON st.expense_id = e.id
                     WHERE (st.to_user = $1 OR st.from_user = $1)
@@ -677,6 +701,8 @@ impl Query {
                             category: row.expense_category.unwrap(),
                             note: row.expense_note,
                             image_id: row.expense_image_id,
+                            updated_at: row.expense_updated_at.unwrap(),
+                            transaction_at: row.expense_transaction_at.unwrap(),
                         })
                     }else{
                         None
@@ -697,6 +723,7 @@ impl Query {
                             with_group_id: row.split_transaction_with_group_id,
                             note: row.split_transaction_note,
                             image_id: row.split_transaction_image_id,
+                            updated_at: row.split_transaction_updated_at.unwrap(),
                         })
                     }else{
                         None
@@ -768,7 +795,7 @@ impl Query {
             categorised_amount.push(CategorisedAmount {
                 category: rec.category,
                 amount: Amount {
-                    amount: rec.total_final_spent.unwrap_or_default(),
+                    amount: rec.total_final_spent.unwrap_or_default() as i64,
                     currency_id: rec.currency_id,
                 },
             });
@@ -817,21 +844,21 @@ impl Query {
                     Expense,
                     r#"
                     WITH expense_users AS (
-                        SELECT e.id, e.title, e.created_at, e.created_by, e.group_id, e.amount, e.currency_id, e.category, e.note, e.image_id
+                        SELECT e.id, e.title, e.created_at, e.created_by, e.group_id, e.amount, e.currency_id, e.category, e.note, e.image_id, e.updated_at, e.transaction_at
                         FROM expenses e
                         JOIN split_transactions s ON e.id = s.expense_id
                         WHERE ((s.from_user = $1 AND s.to_user = $2) OR (s.from_user = $2 AND s.to_user = $1))
                     ),
                     expense_group AS (
-                        SELECT e.id, e.title, e.created_at, e.created_by, e.group_id, e.amount, e.currency_id, e.category, e.note, e.image_id
+                        SELECT e.id, e.title, e.created_at, e.created_by, e.group_id, e.amount, e.currency_id, e.category, e.note, e.image_id, e.updated_at, e.transaction_at
                         FROM expenses e
                         WHERE e.group_id = $5
                     ),
                     all_expenses AS (
-                        SELECT id, title, created_at, created_by, group_id, amount, currency_id, category, note, image_id
+                        SELECT id, title, created_at, created_by, group_id, amount, currency_id, category, note, image_id, updated_at, transaction_at
                         FROM expense_users
                         UNION ALL
-                        SELECT id, title, created_at, created_by, group_id, amount, currency_id, category, note, image_id
+                        SELECT id, title, created_at, created_by, group_id, amount, currency_id, category, note, image_id, updated_at, transaction_at
                         FROM expense_group
                     )
                     SELECT *
@@ -854,7 +881,7 @@ impl Query {
         let expenses = sqlx::query_as!(
                 Expense,
                 r#"
-    SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount, e.currency_id, e.category, e.note, e.image_id
+    SELECT e.id, e.title, e.created_at as created_at, e.created_by, e.group_id, e.amount, e.currency_id, e.category, e.note, e.image_id, e.updated_at, e.transaction_at
     FROM expenses e
     JOIN split_transactions s ON e.id = s.expense_id
     WHERE ((s.from_user = $1 AND s.to_user = $2)

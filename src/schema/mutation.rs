@@ -1,10 +1,10 @@
-use std::{borrow::Borrow, collections::HashMap};
+use std::collections::HashMap;
 
-use crate::{models::split, notification::send_message_notification_with_retry, s3::S3};
-use async_graphql::{context, Context, InputObject, Object, SimpleObject};
+use crate::{notification::send_message_notification_with_retry, s3::S3};
+use async_graphql::{Context, InputObject, Object, SimpleObject};
 use futures::{stream::FuturesUnordered, StreamExt};
 use ip2country::AsnDB;
-use log::debug;
+
 use rand::Rng;
 use sqlx::{Pool, Sqlite};
 use tokio::sync::RwLock;
@@ -19,7 +19,7 @@ use crate::{
         amount::Amount,
         currency::Currency,
         expense::Expense,
-        group::{self, Group},
+        group::Group,
         split::{Split, TransactionType},
         user::{User, UserConfig},
     },
@@ -48,8 +48,7 @@ impl Mutation {
     pub async fn send_email_otp<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(email))]
-        email: String,
+        #[graphql(validator(email))] email: String,
     ) -> anyhow::Result<bool> {
         let otp_map = context
             .data::<OtpMap>()
@@ -77,10 +76,8 @@ impl Mutation {
     pub async fn verify_otp<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(email))]        
-        email: String,
-        #[graphql(validator(max_length=6))]        
-        otp: String,
+        #[graphql(validator(email))] email: String,
+        #[graphql(validator(max_length = 6))] otp: String,
     ) -> anyhow::Result<AuthResult> {
         let pool = get_pool_from_context(context).await?;
 
@@ -118,7 +115,10 @@ impl Mutation {
         }
     }
 
-    pub async fn refresh_token(&self, #[graphql(validator(max_length=8000))] refresh_token: String) -> anyhow::Result<UserSignedUp> {
+    pub async fn refresh_token(
+        &self,
+        #[graphql(validator(max_length = 8000))] refresh_token: String,
+    ) -> anyhow::Result<UserSignedUp> {
         let claims = decode_refresh_token(&refresh_token)?;
         let new_token = create_tokens(claims.user_id, claims.email, claims.phone_number)?;
         if let AuthResult::UserSignedUp(tokens) = new_token {
@@ -131,7 +131,11 @@ impl Mutation {
     pub async fn signup<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(regex=r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",min_length=3,max_length=20))]
+        #[graphql(validator(
+            regex = r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",
+            min_length = 3,
+            max_length = 20
+        ))]
         name: String,
     ) -> anyhow::Result<SignupSuccess> {
         let auth_type = context
@@ -194,7 +198,11 @@ impl Mutation {
     pub async fn create_group<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(regex=r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",min_length=3,max_length=20))]
+        #[graphql(validator(
+            regex = r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",
+            min_length = 3,
+            max_length = 20
+        ))]
         name: String,
     ) -> anyhow::Result<Group> {
         let auth_type = context
@@ -217,8 +225,7 @@ impl Mutation {
     pub async fn set_notification_token<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length=8000))]
-        token: String,
+        #[graphql(validator(max_length = 8000))] token: String,
     ) -> anyhow::Result<String> {
         let self_user = context
             .data::<AuthTypes>()
@@ -239,10 +246,8 @@ impl Mutation {
     pub async fn add_to_group_by_email<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length=100))]
-        group_id: String,
-        #[graphql(validator(email))]
-        email: String,
+        #[graphql(validator(max_length = 100))] group_id: String,
+        #[graphql(validator(email))] email: String,
     ) -> anyhow::Result<&str> {
         let auth_type = context
             .data::<AuthTypes>()
@@ -311,18 +316,18 @@ impl Mutation {
     pub async fn add_non_group_expense<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(regex=r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",min_length=3,max_length=20))]
+        #[graphql(validator(
+            regex = r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",
+            min_length = 3,
+            max_length = 20
+        ))]
         title: String,
         amount: i64,
-        #[graphql(validator(max_length=100))]
-        currency_id: String,
+        #[graphql(validator(max_length = 100))] currency_id: String,
         splits: Vec<SplitInputNonGroup>,
-        #[graphql(validator(max_length=300))]
-        note: Option<String>,
-        #[graphql(validator(max_length=100))]
-        image_id: Option<String>,
-        #[graphql(default = "\"MISC\".to_string()",validator(max_length=100))]
-        category: String,
+        #[graphql(validator(max_length = 300))] note: Option<String>,
+        #[graphql(validator(max_length = 100))] image_id: Option<String>,
+        #[graphql(default = "\"MISC\".to_string()", validator(max_length = 100))] category: String,
     ) -> anyhow::Result<NonGroupExpense> {
         let auth_type = context
             .data::<AuthTypes>()
@@ -427,22 +432,164 @@ impl Mutation {
         }
     }
 
+    // pub async fn edit_expense_title<'ctx>(
+    //     &self,
+    //     context: &Context<'ctx>,
+    //     #[graphql(validator(max_length = 100))] expense_id: String,
+    //     #[graphql(validator(
+    //         regex = r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",
+    //         min_length = 3,
+    //         max_length = 20
+    //     ))]
+    //     title: String,
+    // ) -> anyhow::Result<Expense> {
+    //     let _self_user = context
+    //         .data::<AuthTypes>()
+    //         .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+    //         .as_authorized_user()
+    //         .ok_or(anyhow::anyhow!("Unauthorized"))?;
+    //     let pool = get_pool_from_context(context).await?;
+    //     let update_time = chrono::Utc::now().to_rfc3339();
+
+    //     let result = sqlx::query_as!(
+    //         Expense,
+    //         "UPDATE expenses SET title=$1, updated_at=$3 WHERE id=$2 RETURNING *",
+    //         title,
+    //         expense_id,
+    //         update_time
+    //     )
+    //     .fetch_one(pool)
+    //     .await?;
+    //     Ok(result)
+    // }
+
+    // pub async fn edit_expense_category<'ctx>(
+    //     &self,
+    //     context: &Context<'ctx>,
+    //     #[graphql(validator(max_length = 100))] expense_id: String,
+    //     #[graphql(default = "\"MISC\".to_string()", validator(max_length = 100))] category: String,
+    // ) -> anyhow::Result<Expense> {
+    //     let _self_user = context
+    //         .data::<AuthTypes>()
+    //         .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+    //         .as_authorized_user()
+    //         .ok_or(anyhow::anyhow!("Unauthorized"))?;
+    //     let pool = get_pool_from_context(context).await?;
+    //     let update_time = chrono::Utc::now().to_rfc3339();
+
+    //     let result = sqlx::query_as!(
+    //         Expense,
+    //         "UPDATE expenses SET category=$1, updated_at=$3 WHERE id=$2 RETURNING *",
+    //         category,
+    //         expense_id,
+    //         update_time
+    //     )
+    //     .fetch_one(pool)
+    //     .await?;
+    //     Ok(result)
+    // }
+
+    // pub async fn edit_expense<'ctx>(
+    //     &self,
+    //     context: &Context<'ctx>,
+    //     #[graphql(validator(max_length = 100))] expense_id: String,
+    //     #[graphql(validator(
+    //         regex = r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",
+    //         min_length = 3,
+    //         max_length = 20
+    //     ))]
+    //     title: Option<String>,
+    //     amount: Option<i64>,
+    //     #[graphql(validator(max_length = 100))] currency_id: Option<String>,
+    //     splits: Option<Vec<SplitInput>>,
+    //     #[graphql(validator(max_length = 300))] note: Option<String>,
+    //     #[graphql(validator(max_length = 100))] image_id: Option<String>,
+    //     #[graphql(default = "\"MISC\".to_string()", validator(max_length = 100))] category: String,
+    //     #[graphql(default)] should_replace_image: bool,
+    // ) -> anyhow::Result<Expense> {
+    //     let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;
+    //     let self_user = context
+    //         .data::<AuthTypes>()
+    //         .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+    //         .as_authorized_user()
+    //         .ok_or(anyhow::anyhow!("Unauthorized"))?;
+    //     let pool = get_pool_from_context(context).await?;
+
+    //     let expense = Expense::get_from_id(&expense_id, pool).await?;
+    //     if expense.created_by == self_user.id {
+    //         return Err(anyhow::anyhow!("You are not creator"));
+    //     }
+    //     let mut transaction = pool.begin().await?;
+    //     if let Some(title) = title {
+    //         let result = sqlx::query!(
+    //             "UPDATE expenses SET title=$1 WHERE id=$2",
+    //             title,
+    //             expense_id
+    //         )
+    //         .execute(transaction.as_mut())
+    //         .await?
+    //         .rows_affected();
+    //         if result != 1 {
+    //             return Err(anyhow::anyhow!("Something went wrong"));
+    //         }
+    //     }
+    //     if let Some(amount) = amount {
+    //         let (Some(splits), Some(currency_id)) = (splits, currency_id) else {
+    //             return Err(anyhow::anyhow!(
+    //                 "Must have split with amount and currency id"
+    //             ));
+    //         };
+    //         if splits.iter().any(|split| split.user_id == self_user.id) {
+    //             return Err(anyhow::anyhow!("Cant split to self"));
+    //         }
+    //         if amount <= 0 {
+    //             return Err(anyhow::anyhow!("Amount must be greater than 0"));
+    //         }
+    //         let splits = splits
+    //             .into_iter()
+    //             .filter(|f| f.amount > 0)
+    //             .collect::<Vec<_>>();
+    //         let group_members = Group::get_users(&expense.group_id, pool).await?;
+    //         if !splits
+    //             .iter()
+    //             .all(|s| group_members.iter().any(|user| user.id == s.user_id))
+    //         {
+    //             return Err(anyhow::anyhow!("Not everyone is group member"));
+    //         }
+    //         let result = sqlx::query!(
+    //             "UPDATE expenses SET amount=$1, currency_id=$2 WHERE id=$3",
+    //             amount,
+    //             currency_id,
+    //             expense_id
+    //         )
+    //         .execute(transaction.as_mut())
+    //         .await?
+    //         .rows_affected();
+    //         Expense::edit_expense_splits(&expense_id, splits, &self_user.id, s3, &mut transaction)
+    //             .await?;
+    //         if result != 1 {
+    //             return Err(anyhow::anyhow!("Something went wrong"));
+    //         }
+    //     }
+    //     todo!()
+    // }
+
     pub async fn add_expense<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length=100))]
-        group_id: String,
-        #[graphql(validator(regex=r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",min_length=3,max_length=20))]
+        #[graphql(validator(max_length = 100))] group_id: String,
+        #[graphql(validator(
+            regex = r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",
+            min_length = 3,
+            max_length = 20
+        ))]
         title: String,
         amount: i64,
-        #[graphql(validator(max_length=100))]
-        currency_id: String,
+        #[graphql(validator(max_length = 100))] currency_id: String,
         splits: Vec<SplitInput>,
-        #[graphql(validator(max_length=300))]
-        note: Option<String>,
-        #[graphql(validator(max_length=100))]
-        image_id: Option<String>,
-        #[graphql(default = "\"MISC\".to_string()",validator(max_length=100))] category: String,
+        #[graphql(validator(max_length = 300))] note: Option<String>,
+        #[graphql(validator(max_length = 100))] image_id: Option<String>,
+        #[graphql(default = "\"MISC\".to_string()", validator(max_length = 100))] category: String,
     ) -> anyhow::Result<Expense> {
         let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;
 
@@ -537,17 +684,12 @@ impl Mutation {
     pub async fn settle_in_group<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length=100))]
-        to_user: String,
-        #[graphql(validator(max_length=100))]
-        group_id: String,
+        #[graphql(validator(max_length = 100))] to_user: String,
+        #[graphql(validator(max_length = 100))] group_id: String,
         amount: i64,
-        #[graphql(validator(max_length=100))]
-        currency_id: String,
-        #[graphql(validator(max_length=100))]
-        image_id: Option<String>,
-        #[graphql(validator(max_length=300))]
-        note: Option<String>,
+        #[graphql(validator(max_length = 100))] currency_id: String,
+        #[graphql(validator(max_length = 100))] image_id: Option<String>,
+        #[graphql(validator(max_length = 300))] note: Option<String>,
     ) -> anyhow::Result<Split> {
         let self_user = context
             .data::<AuthTypes>()
@@ -624,8 +766,7 @@ impl Mutation {
     pub async fn simplify_cross_group<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length=100))]
-        with_user: String,
+        #[graphql(validator(max_length = 100))] with_user: String,
     ) -> anyhow::Result<Vec<Split>> {
         let self_user = context
             .data::<AuthTypes>()
@@ -719,15 +860,11 @@ impl Mutation {
     pub async fn auto_settle_with_user<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length=100))]
-        with_user: String,
+        #[graphql(validator(max_length = 100))] with_user: String,
         amount: i64,
-        #[graphql(validator(max_length=100))]
-        currency_id: String,
-        #[graphql(validator(max_length=100))]
-        image_id: Option<String>,
-        #[graphql(validator(max_length=300))]
-        note: Option<String>,
+        #[graphql(validator(max_length = 100))] currency_id: String,
+        #[graphql(validator(max_length = 100))] image_id: Option<String>,
+        #[graphql(validator(max_length = 300))] note: Option<String>,
     ) -> anyhow::Result<Vec<Split>> {
         let self_user = context
             .data::<AuthTypes>()
@@ -872,8 +1009,7 @@ impl Mutation {
     pub async fn set_default_currency<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length=100))]
-        currency_id: String,
+        #[graphql(validator(max_length = 100))] currency_id: String,
     ) -> anyhow::Result<UserConfig> {
         let user = context
             .data::<AuthTypes>()
@@ -895,7 +1031,11 @@ impl Mutation {
     pub async fn change_name<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(regex=r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",min_length=3,max_length=20))]
+        #[graphql(validator(
+            regex = r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",
+            min_length = 3,
+            max_length = 20
+        ))]
         name: String,
     ) -> anyhow::Result<User> {
         let user = context
@@ -918,14 +1058,10 @@ impl Mutation {
     pub async fn convert_currency<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length=100))]
-        with_user: String,
-        #[graphql(validator(max_length=100))]
-        group_id: String,
-        #[graphql(validator(max_length=100))]
-        from_currency_id: String,
-        #[graphql(validator(max_length=100))]
-        to_currency_id: String,
+        #[graphql(validator(max_length = 100))] with_user: String,
+        #[graphql(validator(max_length = 100))] group_id: String,
+        #[graphql(validator(max_length = 100))] from_currency_id: String,
+        #[graphql(validator(max_length = 100))] to_currency_id: String,
     ) -> anyhow::Result<Vec<Split>> {
         let user = context
             .data::<AuthTypes>()
@@ -936,18 +1072,18 @@ impl Mutation {
         let owed = sqlx::query!(
             r"
             SELECT SUM(net_owed_amount) as amount FROM (
-                SELECT 
+                SELECT
                     from_user,
                     to_user,
                     SUM(CASE WHEN from_user = $1 THEN amount ELSE -amount END) AS net_owed_amount
-                FROM 
+                FROM
                     split_transactions
-                WHERE 
-                    ((from_user = $1 AND to_user = $2) OR 
-                    (from_user = $2 AND to_user = $1)) 
+                WHERE
+                    ((from_user = $1 AND to_user = $2) OR
+                    (from_user = $2 AND to_user = $1))
                     AND group_id = $3
                     AND currency_id = $4
-                GROUP BY 
+                GROUP BY
                     from_user, to_user, group_id, currency_id
             )
             ",
@@ -1017,7 +1153,7 @@ impl Mutation {
                         $9,
                         $10
                     )
-                     RETURNING * 
+                     RETURNING *
                     ",
                     rev_id,
                     from_amount,
@@ -1060,7 +1196,7 @@ impl Mutation {
                         $9,
                         $10
                     )
-                     RETURNING * 
+                     RETURNING *
                     ",
                     forw_id,
                     to_amount,
@@ -1105,48 +1241,12 @@ impl Mutation {
             presigned_url: url,
         })
     }
-
-    // pub async fn settle_expense<'ctx>(
-    //     &self,
-    //     context: &Context<'ctx>,
-    //     expense_id: String,
-    //     amount: i64,
-    // ) -> anyhow::Result<Expense> {
-    //     let _user = context
-    //         .data::<AuthTypes>()
-    //         .map_err(|e| anyhow::anyhow!("{e:#?}"))?
-    //         .as_authorized_user()
-    //         .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
-    //     let pool = get_pool_from_context(context).await?;
-
-    //     Expense::settle_expense(&expense_id, &_user.id, amount, pool).await?;
-    //     let expense = Expense::get_from_id(&expense_id, pool).await?;
-
-    //     Ok(expense)
-    // }
-
-    //     pub async fn settle_user<'ctx>(
-    //         &self,
-    //         context: &Context<'ctx>,
-    //         user_id: String,
-    //         amount: i64,
-    //     ) -> anyhow::Result<&str> {
-    //         let _user = context
-    //             .data::<AuthTypes>()
-    //             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
-    //             .as_authorized_user()
-    //             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
-    //         let pool = get_pool_from_context(context).await?;
-
-    //         _user.settle_expense(&user_id, amount, pool).await?;
-    //         Ok("success")
-    //     }
 }
 
 #[derive(InputObject, Clone)]
 pub struct SplitInput {
     pub amount: i64,
-    #[graphql(validator(max_length=100))]
+    #[graphql(validator(max_length = 100))]
     pub user_id: String,
 }
 
@@ -1155,14 +1255,14 @@ pub struct SplitInputNonGroup {
     pub amount: i64,
     #[graphql(validator(email))]
     pub email: Option<String>,
-    #[graphql(validator(max_length=100))]
+    #[graphql(validator(max_length = 100))]
     pub user_id: Option<String>,
 }
 
 #[derive(SimpleObject)]
 pub struct ImageUploadData {
-    #[graphql(validator(max_length=100))]
+    #[graphql(validator(max_length = 100))]
     id: String,
-    #[graphql(validator(max_length=8000))]
+    #[graphql(validator(max_length = 8000))]
     presigned_url: String,
 }

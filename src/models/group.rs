@@ -5,7 +5,7 @@ use async_graphql::{Context, Object, SimpleObject};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-use crate::{auth::AuthTypes, s3::S3, schema::get_pool_from_context};
+use crate::{auth::AuthTypes, schema::get_pool_from_context};
 
 use super::{
     amount::Amount,
@@ -249,7 +249,7 @@ impl Group {
             sqlx::query_as!(
                 Expense,
                 r#"SELECT 
-                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!", currency_id as "currency_id!", category as "category!", note, image_id
+                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!", currency_id as "currency_id!", category as "category!", note, image_id, updated_at, transaction_at
                 FROM expenses where group_id=$1 AND created_at<$3 ORDER BY created_at DESC LIMIT $2"#,
                 self.id,
                 limit,
@@ -261,7 +261,7 @@ impl Group {
             sqlx::query_as!(
                 Expense,
                 r#"SELECT 
-                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!", currency_id as "currency_id!", category as "category!", note, image_id
+                id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!", currency_id as "currency_id!", category as "category!", note, image_id, updated_at, transaction_at
                 FROM expenses where group_id=$1 ORDER BY created_at DESC LIMIT $2"#,
                 self.id,
                 limit,

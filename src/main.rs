@@ -28,7 +28,6 @@ use schema::{
 
 use sqlx::SqlitePool;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer};
-use uuid::Uuid;
 
 use crate::{
     auth::{decode_access_token, AuthTypes, ForwardedHeader},
@@ -59,9 +58,9 @@ static REQWEST_CLIENT: Lazy<ClientWithMiddleware> = Lazy::new(|| {
 
 static FIREBASE_VALUES: Lazy<FirebaseValues> = Lazy::new(|| {
     let service_json_file = std::env::var("SERVICE_JSON").expect("No SERVICE_JSON defined");
-    let data = std::fs::read_to_string(&service_json_file).unwrap();
-    let data = serde_json::from_str(&data).unwrap();
-    data
+    let data = std::fs::read_to_string(service_json_file).unwrap();
+
+    serde_json::from_str(&data).unwrap()
 });
 
 #[derive(Serialize, Deserialize)]
