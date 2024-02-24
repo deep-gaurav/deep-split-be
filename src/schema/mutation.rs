@@ -1136,7 +1136,7 @@ impl Mutation {
                         to_user,
                         transaction_type,
                         part_transaction,
-                        created_at,
+                        created_at,updated_at, transaction_at,
                         created_by,
                         group_id,
                         currency_id
@@ -1148,7 +1148,7 @@ impl Mutation {
                         $4,
                         $5,
                         $6,
-                        $7,
+                        $7,$7,$7,
                         $8,
                         $9,
                         $10
@@ -1179,7 +1179,7 @@ impl Mutation {
                         to_user,
                         transaction_type,
                         part_transaction,
-                        created_at,
+                        created_at,updated_at, transaction_at,
                         created_by,
                         group_id,
                         currency_id
@@ -1191,7 +1191,7 @@ impl Mutation {
                         $4,
                         $5,
                         $6,
-                        $7,
+                        $7,$7,$7,
                         $8,
                         $9,
                         $10

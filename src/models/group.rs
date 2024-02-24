@@ -250,7 +250,7 @@ impl Group {
                 Expense,
                 r#"SELECT 
                 id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!", currency_id as "currency_id!", category as "category!", note, image_id, updated_at, transaction_at
-                FROM expenses where group_id=$1 AND created_at<$3 ORDER BY created_at DESC LIMIT $2"#,
+                FROM expenses where group_id=$1 AND created_at<$3 ORDER BY transaction_at DESC LIMIT $2"#,
                 self.id,
                 limit,
                 from_time
@@ -262,7 +262,7 @@ impl Group {
                 Expense,
                 r#"SELECT 
                 id as "id!", title as  "title!", amount as "amount!", created_at as "created_at!", group_id as "group_id!", created_by as "created_by!", currency_id as "currency_id!", category as "category!", note, image_id, updated_at, transaction_at
-                FROM expenses where group_id=$1 ORDER BY created_at DESC LIMIT $2"#,
+                FROM expenses where group_id=$1 ORDER BY transaction_at DESC LIMIT $2"#,
                 self.id,
                 limit,
             )
@@ -299,7 +299,7 @@ impl Group {
                 to_user,
                 transaction_type,
                 part_transaction,
-                created_at,
+                created_at,updated_at, transaction_at,
                 created_by,
                 group_id,
                 with_group_id,
@@ -314,7 +314,7 @@ impl Group {
                 $4,
                 $5,
                 $6,
-                $7,
+                $7,$7,$7,
                 $8,
                 $9,
                 $10,

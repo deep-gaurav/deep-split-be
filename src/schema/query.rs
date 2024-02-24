@@ -297,6 +297,7 @@ impl Query {
                         st.note AS split_transaction_note,
                         st.image_id AS split_transaction_image_id,
                         st.updated_at AS split_transaction_updated_at,
+                        st.transaction_at AS split_transaction_transaction_at,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -329,6 +330,7 @@ impl Query {
                         st.note AS split_transaction_note,
                         st.image_id AS split_transaction_image_id,
                         st.updated_at AS split_transaction_updated_at,
+                        st.transaction_at AS split_transaction_transaction_at,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -354,7 +356,7 @@ impl Query {
                       FROM split_transactions_right_join
                       WHERE expense_id IS NULL
                     )
-                    ORDER BY COALESCE(expense_created_at, split_transaction_created_at) DESC
+                    ORDER BY COALESCE(expense_transaction_at, split_transaction_transaction_at) DESC
                     LIMIT $4
                     OFFSET $5
                 "#,
@@ -403,6 +405,7 @@ impl Query {
                             note: row.split_transaction_note,
                             image_id: row.split_transaction_image_id,
                             updated_at: row.split_transaction_updated_at.unwrap(),
+                            transaction_at: row.split_transaction_transaction_at.unwrap(),
                         })
                     }else{
                         None
@@ -432,7 +435,7 @@ impl Query {
             "
                 SELECT * from split_transactions WHERE
                 ((from_user = $1 AND to_user = $2) OR (from_user = $2 AND to_user = $1))
-                ORDER BY created_at DESC LIMIT $3
+                ORDER BY transaction_at DESC LIMIT $3
                 OFFSET $4
                 ",
             user.id,
@@ -470,7 +473,7 @@ impl Query {
                 SELECT * from split_transactions WHERE
                 (from_user = $1  OR to_user = $1)
                 AND group_id = $2
-                ORDER BY created_at DESC LIMIT $3
+                ORDER BY transaction_at DESC LIMIT $3
                 OFFSET $4
                 ",
             user.id,
@@ -513,6 +516,7 @@ impl Query {
                 st.note AS transaction_note,
                 st.image_id AS transaction_image,
                 st.updated_at AS transaction_updated_at,
+                st.transaction_at AS transaction_transaction_at,
                 e.id AS expense_id,
                 e.title AS expense_title,
                 e.created_at AS expense_created_at,
@@ -532,7 +536,7 @@ impl Query {
             WHERE
                 (st.from_user = $1 OR st.to_user = $1)
             ORDER BY
-                st.created_at DESC
+                st.transaction_at DESC
             LIMIT $3
             OFFSET $2;
             "#,
@@ -578,6 +582,7 @@ impl Query {
                 note: row.transaction_note,
                 image_id: row.transaction_image,
                 updated_at: row.transaction_updated_at,
+                transaction_at: row.transaction_transaction_at,
             }),
         })
         .collect();
@@ -617,6 +622,7 @@ impl Query {
                         st.note AS split_transaction_note,
                         st.image_id AS split_transaction_image_id,
                         st.updated_at AS split_transaction_updated_at,
+                        st.transaction_at AS split_transaction_transaction_at,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -649,6 +655,7 @@ impl Query {
                         st.note AS split_transaction_note,
                         st.image_id AS split_transaction_image_id,
                         st.updated_at AS split_transaction_updated_at,
+                        st.transaction_at AS split_transaction_transaction_at,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -676,7 +683,7 @@ impl Query {
                       FROM split_transactions_right_join
                       WHERE expense_id IS NULL
                     )
-                    ORDER BY COALESCE(expense_created_at, split_transaction_created_at) DESC
+                    ORDER BY COALESCE(expense_transaction_at, split_transaction_transaction_at) DESC
                     LIMIT $3
                     OFFSET $4
                 "#,
@@ -724,6 +731,7 @@ impl Query {
                             note: row.split_transaction_note,
                             image_id: row.split_transaction_image_id,
                             updated_at: row.split_transaction_updated_at.unwrap(),
+                            transaction_at: row.split_transaction_transaction_at.unwrap(),
                         })
                     }else{
                         None
@@ -863,7 +871,7 @@ impl Query {
                     )
                     SELECT *
                     FROM all_expenses
-                    ORDER BY created_at DESC
+                    ORDER BY transaction_at DESC
                     LIMIT $3
                     OFFSET $4
                     "#,
@@ -886,7 +894,7 @@ impl Query {
     JOIN split_transactions s ON e.id = s.expense_id
     WHERE ((s.from_user = $1 AND s.to_user = $2)
     OR (s.from_user = $2 AND s.to_user = $1))
-    ORDER BY created_at DESC LIMIT $3 OFFSET $4
+    ORDER BY e.transaction_at DESC LIMIT $3 OFFSET $4
                 "#,
                 user_1,
                 user_2,

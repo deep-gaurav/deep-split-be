@@ -27,6 +27,7 @@ pub struct Split {
     pub image_id: Option<String>,
 
     pub updated_at: String,
+    pub transaction_at: String,
 }
 
 #[Object]

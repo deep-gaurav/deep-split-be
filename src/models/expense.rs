@@ -114,8 +114,8 @@ impl Expense {
         let time = chrono::Utc::now().to_rfc3339();
         let expense = sqlx::query_as!(
             Expense,
-            r#"INSERT INTO expenses(id, title, created_at, created_by, group_id, amount, currency_id, category, note, image_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            r#"INSERT INTO expenses(id, title, created_at, updated_at, transaction_at, created_by, group_id, amount, currency_id, category, note, image_id)
+            VALUES ($1, $2, $3, $3, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING
             id as "id!", title as "title!", created_at as "created_at!", created_by as "created_by!", group_id as "group_id!", amount as "amount!", currency_id as "currency_id!", category as "category!", note, image_id, updated_at, transaction_at
             "#,
@@ -136,8 +136,8 @@ impl Expense {
             let id = uuid::Uuid::new_v4().to_string();
 
             let _data = sqlx::query!("
-                INSERT INTO split_transactions(id,expense_id,amount,currency_id,from_user,to_user,transaction_type,created_at,created_by, group_id)
-                VALUES ($1, $2, $3,$4,$5,$6,$7,$8, $9,$10)
+                INSERT INTO split_transactions(id,expense_id,amount,currency_id,from_user,to_user,transaction_type,created_at,updated_at, transaction_at, created_by, group_id)
+                VALUES ($1, $2, $3,$4,$5,$6,$7, $8,$8,$8, $9,$10)
             ",
             id,
             expense.id,
@@ -198,8 +198,8 @@ impl Expense {
             let id = uuid::Uuid::new_v4().to_string();
 
             let _data = sqlx::query!("
-                INSERT INTO split_transactions(id,expense_id,amount,currency_id,from_user,to_user,transaction_type,created_at,created_by, group_id, updated_at)
-                VALUES ($1, $2, $3,$4,$5,$6,$7,$8, $9,$10, $11)
+                INSERT INTO split_transactions(id,expense_id,amount,currency_id,from_user,to_user,transaction_type,created_at,updated_at, transaction_at, created_by, group_id, updated_at)
+                VALUES ($1, $2, $3,$4,$5,$6,$7, $8,$8,$8, $9,$10, $11)
                 ",
                 id,
                 expense.id,
