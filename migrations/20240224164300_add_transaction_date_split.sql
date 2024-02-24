@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS new_split_transactions (
 
 
 -- Step 4: Copy data from the old table to the new table
-INSERT INTO new_split_transactions SELECT id, expense_id, amount, currency_id, from_user, to_user, transaction_type, part_transaction, created_at, created_by, group_id, with_group_id, updated_at, image_id, note, transaction_at  FROM split_transactions;
+INSERT INTO new_split_transactions SELECT id, expense_id, amount, currency_id, from_user, to_user, transaction_type, part_transaction, created_at, created_by, group_id, with_group_id, updated_at, image_id, transaction_at, note  FROM split_transactions;
 
 -- Step 5: Rename the new table to the original table name
 DROP TABLE split_transactions;
