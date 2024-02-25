@@ -1,7 +1,9 @@
 use std::str::FromStr;
 
-use async_graphql::Context;
+use async_graphql::{Context, CustomValidator, InputValueError};
 use ip2country::AsnDB;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use sqlx::SqlitePool;
 
 use crate::{auth::ForwardedHeader, models::currency::Currency};
@@ -40,4 +42,30 @@ pub async fn currency_from_ip(
         }
     }
     Err(anyhow::anyhow!("Currency could not be determined"))
+}
+
+// static NAME_VALIDATOR_REGEX: Lazy<Regex> =
+//     Lazy::new(|| Regex::new(r"^(?!\s+$)[^\s\p{Cc}]+(?:\s+[^\s\p{Cc}]+)*$").unwrap());
+
+pub struct NameValidator {
+    field_name: &'static str,
+}
+
+impl NameValidator {
+    pub fn new(name: &'static str) -> Self {
+        Self { field_name: name }
+    }
+}
+
+impl CustomValidator<String> for NameValidator {
+    fn check(&self, value: &String) -> Result<(), InputValueError<String>> {
+        if value.trim().len() > 3 && value.trim().len() < 60 {
+            Ok(())
+        } else {
+            Err(InputValueError::custom(format!(
+                "Invalid {}",
+                self.field_name
+            )))
+        }
+    }
 }

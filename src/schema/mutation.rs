@@ -25,7 +25,7 @@ use crate::{
     },
 };
 
-use super::{currency_from_ip, get_pool_from_context};
+use super::{currency_from_ip, get_pool_from_context, NameValidator};
 
 pub type OtpMap = RwLock<ExpiringHashMap<String, String>>;
 
@@ -132,12 +132,13 @@ impl Mutation {
         &self,
         context: &Context<'ctx>,
         #[graphql(validator(
-            regex = r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",
+            custom = r#"NameValidator::new("name")"#,
             min_length = 3,
             max_length = 20
         ))]
         name: String,
     ) -> anyhow::Result<SignupSuccess> {
+        let name = name.trim();
         let auth_type = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
@@ -199,12 +200,13 @@ impl Mutation {
         &self,
         context: &Context<'ctx>,
         #[graphql(validator(
-            regex = r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",
+            custom = r#"NameValidator::new("name")"#,
             min_length = 3,
             max_length = 20
         ))]
         name: String,
     ) -> anyhow::Result<Group> {
+        let name = name.trim().to_string();
         let auth_type = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
@@ -317,7 +319,7 @@ impl Mutation {
         &self,
         context: &Context<'ctx>,
         #[graphql(validator(
-            regex = r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",
+            custom = r#"NameValidator::new("title")"#,
             min_length = 3,
             max_length = 20
         ))]
@@ -330,6 +332,7 @@ impl Mutation {
         #[graphql(default = "\"MISC\".to_string()", validator(max_length = 100))] category: String,
         #[graphql(validator(max_length = 100))] transaction_at: Option<String>,
     ) -> anyhow::Result<NonGroupExpense> {
+        let title = title.trim().to_string();
         let auth_type = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?;
@@ -581,7 +584,7 @@ impl Mutation {
         context: &Context<'ctx>,
         #[graphql(validator(max_length = 100))] group_id: String,
         #[graphql(validator(
-            regex = r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",
+            custom = r#"NameValidator::new("title")"#,
             min_length = 3,
             max_length = 20
         ))]
@@ -594,6 +597,7 @@ impl Mutation {
         #[graphql(default = "\"MISC\".to_string()", validator(max_length = 100))] category: String,
         #[graphql(validator(max_length = 100))] transaction_at: Option<String>,
     ) -> anyhow::Result<Expense> {
+        let title = title.trim();
         let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;
 
         let auth_type = context
@@ -1036,12 +1040,13 @@ impl Mutation {
         &self,
         context: &Context<'ctx>,
         #[graphql(validator(
-            regex = r"^[^\p{P}\p{S}\p{C}0-9_]+(?: [^\p{P}\p{S}\p{C}0-9_]+)*$",
+            custom = r#"NameValidator::new("name")"#,
             min_length = 3,
             max_length = 20
         ))]
         name: String,
     ) -> anyhow::Result<User> {
+        let name = name.trim();
         let user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?

@@ -43,6 +43,7 @@ serde_urlencoded = "0.7.1"
 rust-s3 = { version = "0.33.0", default-features = false, features = [
     "tokio-rustls-tls",
 ] }
+regex = "1.10.3"
 
 [build-dependencies]
 git2 = "0.18.1"
