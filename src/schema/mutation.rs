@@ -328,6 +328,7 @@ impl Mutation {
         #[graphql(validator(max_length = 300))] note: Option<String>,
         #[graphql(validator(max_length = 100))] image_id: Option<String>,
         #[graphql(default = "\"MISC\".to_string()", validator(max_length = 100))] category: String,
+        #[graphql(validator(max_length = 100))] transaction_at: Option<String>,
     ) -> anyhow::Result<NonGroupExpense> {
         let auth_type = context
             .data::<AuthTypes>()
@@ -421,6 +422,7 @@ impl Mutation {
                         note,
                         image_id,
                         category,
+                        transaction_at,
                     )
                     .await?;
                 for user in splits.into_iter() {
@@ -590,6 +592,7 @@ impl Mutation {
         #[graphql(validator(max_length = 300))] note: Option<String>,
         #[graphql(validator(max_length = 100))] image_id: Option<String>,
         #[graphql(default = "\"MISC\".to_string()", validator(max_length = 100))] category: String,
+        #[graphql(validator(max_length = 100))] transaction_at: Option<String>,
     ) -> anyhow::Result<Expense> {
         let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;
 
@@ -632,6 +635,7 @@ impl Mutation {
                     &category,
                     note,
                     image_id,
+                    transaction_at,
                     s3,
                     pool,
                 )

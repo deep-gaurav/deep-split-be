@@ -106,22 +106,25 @@ impl Expense {
         category: &str,
         note: Option<String>,
         image_id: Option<String>,
+        transaction_time: Option<String>,
         s3: &S3,
         pool: &SqlitePool,
     ) -> anyhow::Result<Expense> {
         let mut transaction = pool.begin().await?;
         let id = uuid::Uuid::new_v4().to_string();
         let time = chrono::Utc::now().to_rfc3339();
+        let transaction_at = transaction_time.unwrap_or(time.clone());
         let expense = sqlx::query_as!(
             Expense,
             r#"INSERT INTO expenses(id, title, created_at, updated_at, transaction_at, created_by, group_id, amount, currency_id, category, note, image_id)
-            VALUES ($1, $2, $3, $3, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING
             id as "id!", title as "title!", created_at as "created_at!", created_by as "created_by!", group_id as "group_id!", amount as "amount!", currency_id as "currency_id!", category as "category!", note, image_id, updated_at, transaction_at
             "#,
             id,
             title,
             time,
+            transaction_at,
             user_id,
             group_id,
             amount.amount,
@@ -137,7 +140,7 @@ impl Expense {
 
             let _data = sqlx::query!("
                 INSERT INTO split_transactions(id,expense_id,amount,currency_id,from_user,to_user,transaction_type,created_at,updated_at, transaction_at, created_by, group_id)
-                VALUES ($1, $2, $3,$4,$5,$6,$7, $8,$8,$8, $9,$10)
+                VALUES ($1, $2, $3,$4,$5,$6,$7, $8,$8,$9, $10,$11)
             ",
             id,
             expense.id,
@@ -147,6 +150,7 @@ impl Expense {
             user_id,
             ttype,
             time,
+            transaction_at,
             user_id,
             group_id,
         ).execute(transaction.as_mut()).await.map_err(|e|
