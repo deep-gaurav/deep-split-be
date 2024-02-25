@@ -354,7 +354,7 @@ impl Query {
                       UNION ALL
                       SELECT *
                       FROM split_transactions_right_join
-                      WHERE expense_id IS NULL
+                      WHERE expense_group_id IS NOT $3
                     )
                     ORDER BY COALESCE(expense_transaction_at, split_transaction_transaction_at) DESC
                     LIMIT $4
