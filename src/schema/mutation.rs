@@ -25,7 +25,7 @@ use crate::{
     },
 };
 
-use super::{currency_from_ip, get_pool_from_context, NameValidator};
+use super::{currency_from_ip, get_pool_from_context, DateTimeValidator, NameValidator};
 
 pub type OtpMap = RwLock<ExpiringHashMap<String, String>>;
 
@@ -330,7 +330,8 @@ impl Mutation {
         #[graphql(validator(max_length = 300))] note: Option<String>,
         #[graphql(validator(max_length = 100))] image_id: Option<String>,
         #[graphql(default = "\"MISC\".to_string()", validator(max_length = 100))] category: String,
-        #[graphql(validator(max_length = 100))] transaction_at: Option<String>,
+        #[graphql(validator(custom = r#"DateTimeValidator::new("transaction_at")"#))]
+        transaction_at: Option<String>,
     ) -> anyhow::Result<NonGroupExpense> {
         let title = title.trim().to_string();
         let auth_type = context
@@ -595,7 +596,8 @@ impl Mutation {
         #[graphql(validator(max_length = 300))] note: Option<String>,
         #[graphql(validator(max_length = 100))] image_id: Option<String>,
         #[graphql(default = "\"MISC\".to_string()", validator(max_length = 100))] category: String,
-        #[graphql(validator(max_length = 100))] transaction_at: Option<String>,
+        #[graphql(validator(custom = r#"DateTimeValidator::new("transaction_at")"#))]
+        transaction_at: Option<String>,
     ) -> anyhow::Result<Expense> {
         let title = title.trim();
         let s3 = context.data::<S3>().map_err(|e| anyhow::anyhow!("{e:?}"))?;

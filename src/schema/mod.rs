@@ -69,3 +69,26 @@ impl CustomValidator<String> for NameValidator {
         }
     }
 }
+
+pub struct DateTimeValidator {
+    field_name: &'static str,
+}
+
+impl DateTimeValidator {
+    pub fn new(name: &'static str) -> Self {
+        Self { field_name: name }
+    }
+}
+
+impl CustomValidator<String> for DateTimeValidator {
+    fn check(&self, value: &String) -> Result<(), InputValueError<String>> {
+        if chrono::DateTime::parse_from_rfc3339(value).is_ok() {
+            Ok(())
+        } else {
+            Err(InputValueError::custom(format!(
+                "Invalid {}",
+                self.field_name
+            )))
+        }
+    }
+}

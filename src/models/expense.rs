@@ -1,4 +1,5 @@
 use async_graphql::{Context, Object};
+use chrono::TimeZone;
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
 use crate::{
@@ -113,7 +114,14 @@ impl Expense {
         let mut transaction = pool.begin().await?;
         let id = uuid::Uuid::new_v4().to_string();
         let time = chrono::Utc::now().to_rfc3339();
-        let transaction_at = transaction_time.unwrap_or(time.clone());
+        let transaction_at = transaction_time
+            .and_then(|time| chrono::DateTime::parse_from_rfc3339(&time).ok())
+            .map(|time| {
+                chrono::Utc
+                    .from_utc_datetime(&time.naive_utc())
+                    .to_rfc3339()
+            })
+            .unwrap_or(time.clone());
         let expense = sqlx::query_as!(
             Expense,
             r#"INSERT INTO expenses(id, title, created_at, updated_at, transaction_at, created_by, group_id, amount, currency_id, category, note, image_id)
