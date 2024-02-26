@@ -84,7 +84,6 @@ impl User {
         name: &str,
         phone: Option<String>,
         email: Option<String>,
-        upi_id: Option<String>,
         default_currency_id: String,
         pool: &SqlitePool,
     ) -> anyhow::Result<User> {
@@ -106,26 +105,6 @@ impl User {
         )
         .execute(transaction.as_mut())
         .await?;
-        if let Some(upi_id) = upi_id {
-            let id = uuid::Uuid::new_v4().to_string();
-            log::debug!("id={id} user_id: {} upi_id: {upi_id}", user.id);
-            let upi_id = sqlx::query!(
-                "INSERT INTO payment_modes(id,mode,user_id,value) VALUES ($1,$2,$3,$4)",
-                id,
-                "UPI",
-                user.id,
-                upi_id
-            )
-            .execute(transaction.as_mut())
-            .await
-            .map_err(|e| {
-                log::warn!("Error {:#?}", e);
-                e
-            })?;
-            if upi_id.rows_affected() != 1 {
-                return Err(anyhow::anyhow!("Cannot add payment method"));
-            }
-        }
         transaction.commit().await?;
         Ok(user)
     }
@@ -347,7 +326,10 @@ impl User {
     //     }
     // }
 
-    pub async fn upi_ids<'ctx>(&self, context: &Context<'ctx>) -> anyhow::Result<Vec<String>> {
+    pub async fn payment_modes<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+    ) -> anyhow::Result<Vec<PaymentMode>> {
         let _user = context
             .data::<AuthTypes>()
             .map_err(|e| anyhow::anyhow!("{e:#?}"))?
@@ -355,15 +337,13 @@ impl User {
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
 
-        let id = sqlx::query!(
-            r#"SELECT * from payment_modes WHERE user_id = $1 AND mode='UPI'"#,
+        let id = sqlx::query_as!(
+            PaymentMode,
+            r#"SELECT * from payment_modes WHERE user_id = $1"#,
             self.id
         )
         .fetch_all(pool)
-        .await?
-        .into_iter()
-        .map(|rec| rec.value)
-        .collect();
+        .await?;
         Ok(id)
     }
 }
@@ -378,4 +358,12 @@ pub struct OwedInGroup {
 pub struct UserConfig {
     pub user_id: String,
     pub default_currency_id: String,
+}
+
+#[derive(SimpleObject)]
+pub struct PaymentMode {
+    pub id: String,
+    pub mode: String,
+    pub user_id: String,
+    pub value: String,
 }

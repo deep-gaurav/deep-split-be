@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::{notification::send_message_notification_with_retry, s3::S3};
+use crate::{
+    models::user::PaymentMode, notification::send_message_notification_with_retry, s3::S3,
+};
 use async_graphql::{Context, InputObject, Object, SimpleObject};
 use futures::{stream::FuturesUnordered, StreamExt};
 use ip2country::AsnDB;
@@ -8,6 +10,7 @@ use ip2country::AsnDB;
 use rand::Rng;
 use sqlx::{Pool, Sqlite};
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 use crate::{
     auth::{
@@ -172,7 +175,6 @@ impl Mutation {
                             &name,
                             claims.phone_number.clone(),
                             claims.email.clone(),
-                            None,
                             currency_id,
                             pool,
                         )
@@ -1014,6 +1016,95 @@ impl Mutation {
             log::info!("Skipping notification, no token")
         }
         Ok(splits)
+    }
+
+    pub async fn add_upi_id<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        upi_id: String,
+    ) -> anyhow::Result<PaymentMode> {
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+        let id = Uuid::new_v4().to_string();
+        let payment_mode = sqlx::query_as!(
+            PaymentMode,
+            "INSERT INTO payment_modes(id,mode,user_id,value) VALUES ($1,$2,$3,$4) RETURNING *",
+            id,
+            "UPI_VPA",
+            user.id,
+            upi_id
+        )
+        .fetch_one(pool)
+        .await?;
+        Ok(payment_mode)
+    }
+
+    pub async fn edit_upi_id<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        payment_mode_id: String,
+        upi_id: String,
+    ) -> anyhow::Result<PaymentMode> {
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+        let previous_mode = sqlx::query_as!(
+            PaymentMode,
+            "SELECT * from payment_modes WHERE id=$1",
+            payment_mode_id,
+        )
+        .fetch_one(pool)
+        .await?;
+        if previous_mode.user_id != user.id {
+            return Err(anyhow::anyhow!("Unauthorized"));
+        }
+        if previous_mode.mode != "UPI_VPA" {
+            return Err(anyhow::anyhow!("Not UPI_VPA mode"));
+        }
+        let payment_mode = sqlx::query_as!(
+            PaymentMode,
+            "UPDATE payment_modes SET value = $2 WHERE id=$1 RETURNING *",
+            payment_mode_id,
+            upi_id,
+        )
+        .fetch_one(pool)
+        .await?;
+        Ok(payment_mode)
+    }
+
+    pub async fn remove_payment_mode<'ctx>(
+        &self,
+        context: &Context<'ctx>,
+        payment_mode_id: String,
+    ) -> anyhow::Result<PaymentMode> {
+        let user = context
+            .data::<AuthTypes>()
+            .map_err(|e| anyhow::anyhow!("{e:#?}"))?
+            .as_authorized_user()
+            .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
+        let pool = get_pool_from_context(context).await?;
+        let previous_mode = sqlx::query_as!(
+            PaymentMode,
+            "SELECT * from payment_modes WHERE id=$1",
+            payment_mode_id,
+        )
+        .fetch_one(pool)
+        .await?;
+
+        if previous_mode.user_id != user.id {
+            return Err(anyhow::anyhow!("Unauthorized"));
+        }
+        sqlx::query!("DELETE FROM payment_modes WHERE id = $1", payment_mode_id)
+            .execute(pool)
+            .await?;
+        Ok(previous_mode)
     }
 
     pub async fn set_default_currency<'ctx>(
