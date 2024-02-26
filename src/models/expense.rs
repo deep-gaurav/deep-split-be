@@ -98,6 +98,7 @@ impl Expense {
 }
 
 impl Expense {
+    #[allow(clippy::too_many_arguments)]
     pub async fn new_expense(
         user_id: &str,
         title: &str,

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use async_graphql::{Context, CustomValidator, InputValueError, ScalarType};
+use async_graphql::{Context, CustomValidator, InputValueError};
 use ip2country::AsnDB;
 use once_cell::sync::Lazy;
 use regex::Regex;

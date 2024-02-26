@@ -169,13 +169,13 @@ impl Mutation {
                     currency.id
                 };
                 let user = match User::get_from_email(&email, pool).await {
-                    Ok(user) => User::set_user_name(&user.id, &name, currency_id, pool).await?,
+                    Ok(user) => User::set_user_name(&user.id, name, currency_id, pool).await?,
                     Err(_) => {
                         let id = uuid::Uuid::new_v4().to_string();
 
                         User::new_user(
                             &id,
-                            &name,
+                            name,
                             claims.phone_number.clone(),
                             claims.email.clone(),
                             currency_id,
@@ -320,6 +320,7 @@ impl Mutation {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_non_group_expense<'ctx>(
         &self,
         context: &Context<'ctx>,
@@ -584,7 +585,7 @@ impl Mutation {
     //     }
     //     todo!()
     // }
-
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_expense<'ctx>(
         &self,
         context: &Context<'ctx>,
@@ -636,7 +637,7 @@ impl Mutation {
                 }
                 let expense = Expense::new_expense(
                     &_user.id,
-                    &title,
+                    title,
                     &group_id,
                     &Amount {
                         amount,
@@ -696,6 +697,7 @@ impl Mutation {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn settle_in_group<'ctx>(
         &self,
         context: &Context<'ctx>,
