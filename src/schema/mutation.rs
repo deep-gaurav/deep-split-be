@@ -707,6 +707,7 @@ impl Mutation {
         #[graphql(validator(max_length = 100))] currency_id: String,
         #[graphql(validator(custom = r#"IdValidator::new("image_id")"#))] image_id: Option<String>,
         #[graphql(validator(max_length = 300))] note: Option<String>,
+        #[graphql(validator(max_length = 1000))] transaction_metadata: Option<String>,
     ) -> anyhow::Result<Split> {
         let self_user = context
             .data::<AuthTypes>()
@@ -739,6 +740,7 @@ impl Mutation {
             &currency_id,
             note,
             image_id.clone(),
+            transaction_metadata,
         )
         .await?;
         if let Some(image_id) = image_id {
@@ -838,6 +840,7 @@ impl Mutation {
                                 currency,
                                 None,
                                 None,
+                                None,
                             )
                             .await?,
                         );
@@ -853,6 +856,7 @@ impl Mutation {
                                 &mut transaction,
                                 Some(positive.1.clone()),
                                 currency,
+                                None,
                                 None,
                                 None,
                             )
@@ -882,6 +886,7 @@ impl Mutation {
         #[graphql(validator(max_length = 100))] currency_id: String,
         #[graphql(validator(custom = r#"IdValidator::new("image_id")"#))] image_id: Option<String>,
         #[graphql(validator(max_length = 300))] note: Option<String>,
+        #[graphql(validator(max_length = 1000))] transaction_metadata: Option<String>,
     ) -> anyhow::Result<Vec<Split>> {
         let self_user = context
             .data::<AuthTypes>()
@@ -932,6 +937,7 @@ impl Mutation {
                         &currency_id,
                         note.clone(),
                         image_id.clone(),
+                        transaction_metadata.clone(),
                     )
                     .await?,
                 )
@@ -981,6 +987,7 @@ impl Mutation {
                     &currency_id,
                     note,
                     image_id.clone(),
+                    transaction_metadata,
                 )
                 .await?,
             );
@@ -1205,7 +1212,6 @@ impl Mutation {
         .await?
         .amount
         .unwrap_or_default();
-        log::info!("OWED Amount {owed}");
         match owed.cmp(&0) {
             std::cmp::Ordering::Equal => Ok(vec![]),
             std::cmp::Ordering::Greater | std::cmp::Ordering::Less => {
@@ -1228,7 +1234,6 @@ impl Mutation {
                     / from_currency.rate
                     * to_currency.rate) as i64;
 
-                log::info!("From amount {from_amount} to amount {to_amount}");
                 let (from, to) = if owed.cmp(&0) == std::cmp::Ordering::Greater {
                     (&with_user, &user.id)
                 } else {

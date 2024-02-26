@@ -28,6 +28,8 @@ pub struct Split {
 
     pub updated_at: String,
     pub transaction_at: String,
+
+    pub transaction_metadata: Option<String>,
 }
 
 #[Object]
@@ -149,6 +151,10 @@ impl Split {
 
     pub async fn transaction_at(&self) -> &str {
         &self.transaction_at
+    }
+
+    pub async fn transaction_metadata(&self) -> &Option<String> {
+        &self.transaction_metadata
     }
 }
 

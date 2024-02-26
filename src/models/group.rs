@@ -285,6 +285,7 @@ impl Group {
         currency_id: &str,
         note: Option<String>,
         image_id: Option<String>,
+        transaction_metadata: Option<String>,
     ) -> anyhow::Result<Split> {
         let id = Uuid::new_v4().to_string();
         let time = chrono::Utc::now().to_rfc3339();
@@ -305,7 +306,8 @@ impl Group {
                 with_group_id,
                 currency_id,
                 image_id,
-                note
+                note,
+                transaction_metadata
             )
             VALUES (
                 $1,
@@ -320,7 +322,8 @@ impl Group {
                 $10,
                 $11,
                 $12,
-                $13
+                $13,
+                $14
             )
              RETURNING * 
             ",
@@ -336,7 +339,8 @@ impl Group {
             with_group_id,
             currency_id,
             image_id,
-            note
+            note,
+            transaction_metadata
         )
         .fetch_one(transaction.as_mut())
         .await?;

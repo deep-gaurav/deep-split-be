@@ -298,6 +298,7 @@ impl Query {
                         st.image_id AS split_transaction_image_id,
                         st.updated_at AS split_transaction_updated_at,
                         st.transaction_at AS split_transaction_transaction_at,
+                        st.transaction_metadata AS split_transaction_metadata,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -331,6 +332,7 @@ impl Query {
                         st.image_id AS split_transaction_image_id,
                         st.updated_at AS split_transaction_updated_at,
                         st.transaction_at AS split_transaction_transaction_at,
+                        st.transaction_metadata AS split_transaction_metadata,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -406,6 +408,7 @@ impl Query {
                             image_id: row.split_transaction_image_id,
                             updated_at: row.split_transaction_updated_at.unwrap(),
                             transaction_at: row.split_transaction_transaction_at.unwrap(),
+                            transaction_metadata:row.split_transaction_metadata,
                         })
                     }else{
                         None
@@ -517,6 +520,7 @@ impl Query {
                 st.image_id AS transaction_image,
                 st.updated_at AS transaction_updated_at,
                 st.transaction_at AS transaction_transaction_at,
+                st.transaction_metadata AS split_transaction_metadata,
                 e.id AS expense_id,
                 e.title AS expense_title,
                 e.created_at AS expense_created_at,
@@ -583,6 +587,7 @@ impl Query {
                 image_id: row.transaction_image,
                 updated_at: row.transaction_updated_at,
                 transaction_at: row.transaction_transaction_at,
+                transaction_metadata: row.split_transaction_metadata,
             }),
         })
         .collect();
@@ -623,6 +628,7 @@ impl Query {
                         st.image_id AS split_transaction_image_id,
                         st.updated_at AS split_transaction_updated_at,
                         st.transaction_at AS split_transaction_transaction_at,
+                        st.transaction_metadata AS split_transaction_metadata,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -656,6 +662,7 @@ impl Query {
                         st.image_id AS split_transaction_image_id,
                         st.updated_at AS split_transaction_updated_at,
                         st.transaction_at AS split_transaction_transaction_at,
+                        st.transaction_metadata AS split_transaction_metadata,
                         e.id AS expense_id,
                         e.title as expense_title,
                         e.created_at as expense_created_at,
@@ -732,6 +739,7 @@ impl Query {
                             image_id: row.split_transaction_image_id,
                             updated_at: row.split_transaction_updated_at.unwrap(),
                             transaction_at: row.split_transaction_transaction_at.unwrap(),
+                            transaction_metadata: row.split_transaction_metadata,
                         })
                     }else{
                         None
