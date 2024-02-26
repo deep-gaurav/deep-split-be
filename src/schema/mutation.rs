@@ -28,7 +28,10 @@ use crate::{
     },
 };
 
-use super::{currency_from_ip, get_pool_from_context, DateTimeValidator, NameValidator};
+use super::{
+    currency_from_ip, get_pool_from_context, DateTimeValidator, IdValidator, NameValidator,
+    UpiIdValidator,
+};
 
 pub type OtpMap = RwLock<ExpiringHashMap<String, String>>;
 
@@ -250,7 +253,7 @@ impl Mutation {
     pub async fn add_to_group_by_email<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length = 100))] group_id: String,
+        #[graphql(validator(custom = r#"IdValidator::new("group_id")"#))] group_id: String,
         #[graphql(validator(email))] email: String,
     ) -> anyhow::Result<&str> {
         let auth_type = context
@@ -330,7 +333,7 @@ impl Mutation {
         #[graphql(validator(max_length = 100))] currency_id: String,
         splits: Vec<SplitInputNonGroup>,
         #[graphql(validator(max_length = 300))] note: Option<String>,
-        #[graphql(validator(max_length = 100))] image_id: Option<String>,
+        #[graphql(validator(custom = r#"IdValidator::new("image_id")"#))] image_id: Option<String>,
         #[graphql(default = "\"MISC\".to_string()", validator(max_length = 100))] category: String,
         #[graphql(validator(custom = r#"DateTimeValidator::new("transaction_at")"#))]
         transaction_at: Option<String>,
@@ -585,7 +588,7 @@ impl Mutation {
     pub async fn add_expense<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length = 100))] group_id: String,
+        #[graphql(validator(custom = r#"IdValidator::new("group_id")"#))] group_id: String,
         #[graphql(validator(
             custom = r#"NameValidator::new("title")"#,
             min_length = 3,
@@ -596,7 +599,7 @@ impl Mutation {
         #[graphql(validator(max_length = 100))] currency_id: String,
         splits: Vec<SplitInput>,
         #[graphql(validator(max_length = 300))] note: Option<String>,
-        #[graphql(validator(max_length = 100))] image_id: Option<String>,
+        #[graphql(validator(custom = r#"IdValidator::new("group_id")"#))] image_id: Option<String>,
         #[graphql(default = "\"MISC\".to_string()", validator(max_length = 100))] category: String,
         #[graphql(validator(custom = r#"DateTimeValidator::new("transaction_at")"#))]
         transaction_at: Option<String>,
@@ -696,11 +699,11 @@ impl Mutation {
     pub async fn settle_in_group<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length = 100))] to_user: String,
-        #[graphql(validator(max_length = 100))] group_id: String,
+        #[graphql(validator(custom = r#"IdValidator::new("to_user")"#))] to_user: String,
+        #[graphql(validator(custom = r#"IdValidator::new("group_id")"#))] group_id: String,
         amount: i64,
         #[graphql(validator(max_length = 100))] currency_id: String,
-        #[graphql(validator(max_length = 100))] image_id: Option<String>,
+        #[graphql(validator(custom = r#"IdValidator::new("image_id")"#))] image_id: Option<String>,
         #[graphql(validator(max_length = 300))] note: Option<String>,
     ) -> anyhow::Result<Split> {
         let self_user = context
@@ -778,7 +781,7 @@ impl Mutation {
     pub async fn simplify_cross_group<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length = 100))] with_user: String,
+        #[graphql(validator(custom = r#"IdValidator::new("with_user")"#))] with_user: String,
     ) -> anyhow::Result<Vec<Split>> {
         let self_user = context
             .data::<AuthTypes>()
@@ -872,10 +875,10 @@ impl Mutation {
     pub async fn auto_settle_with_user<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length = 100))] with_user: String,
+        #[graphql(validator(custom = r#"IdValidator::new("with_user")"#))] with_user: String,
         amount: i64,
         #[graphql(validator(max_length = 100))] currency_id: String,
-        #[graphql(validator(max_length = 100))] image_id: Option<String>,
+        #[graphql(validator(custom = r#"IdValidator::new("image_id")"#))] image_id: Option<String>,
         #[graphql(validator(max_length = 300))] note: Option<String>,
     ) -> anyhow::Result<Vec<Split>> {
         let self_user = context
@@ -1021,7 +1024,7 @@ impl Mutation {
     pub async fn add_upi_id<'ctx>(
         &self,
         context: &Context<'ctx>,
-        upi_id: String,
+        #[graphql(validator(custom = r#"UpiIdValidator::new("upi_id")"#))] upi_id: String,
     ) -> anyhow::Result<PaymentMode> {
         let user = context
             .data::<AuthTypes>()
@@ -1046,8 +1049,9 @@ impl Mutation {
     pub async fn edit_upi_id<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(custom = r#"IdValidator::new("payment_mode_id")"#))]
         payment_mode_id: String,
-        upi_id: String,
+        #[graphql(validator(custom = r#"UpiIdValidator::new("upi_id")"#))] upi_id: String,
     ) -> anyhow::Result<PaymentMode> {
         let user = context
             .data::<AuthTypes>()
@@ -1082,6 +1086,7 @@ impl Mutation {
     pub async fn remove_payment_mode<'ctx>(
         &self,
         context: &Context<'ctx>,
+        #[graphql(validator(custom = r#"IdValidator::new("payment_mode_id")"#))]
         payment_mode_id: String,
     ) -> anyhow::Result<PaymentMode> {
         let user = context
@@ -1160,8 +1165,8 @@ impl Mutation {
     pub async fn convert_currency<'ctx>(
         &self,
         context: &Context<'ctx>,
-        #[graphql(validator(max_length = 100))] with_user: String,
-        #[graphql(validator(max_length = 100))] group_id: String,
+        #[graphql(validator(custom = r#"IdValidator::new("with_user")"#))] with_user: String,
+        #[graphql(validator(custom = r#"IdValidator::new("group_id")"#))] group_id: String,
         #[graphql(validator(max_length = 100))] from_currency_id: String,
         #[graphql(validator(max_length = 100))] to_currency_id: String,
     ) -> anyhow::Result<Vec<Split>> {
@@ -1348,7 +1353,7 @@ impl Mutation {
 #[derive(InputObject, Clone)]
 pub struct SplitInput {
     pub amount: i64,
-    #[graphql(validator(max_length = 100))]
+    #[graphql(validator(custom = r#"IdValidator::new("user_id")"#))]
     pub user_id: String,
 }
 
@@ -1357,13 +1362,13 @@ pub struct SplitInputNonGroup {
     pub amount: i64,
     #[graphql(validator(email))]
     pub email: Option<String>,
-    #[graphql(validator(max_length = 100))]
+    #[graphql(validator(custom = r#"IdValidator::new("user_id")"#))]
     pub user_id: Option<String>,
 }
 
 #[derive(SimpleObject)]
 pub struct ImageUploadData {
-    #[graphql(validator(max_length = 100))]
+    #[graphql(validator(custom = r#"IdValidator::new("id")"#))]
     id: String,
     #[graphql(validator(max_length = 8000))]
     presigned_url: String,

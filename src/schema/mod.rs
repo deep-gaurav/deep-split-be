@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use async_graphql::{Context, CustomValidator, InputValueError};
+use async_graphql::{Context, CustomValidator, InputValueError, ScalarType};
 use ip2country::AsnDB;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -44,8 +44,8 @@ pub async fn currency_from_ip(
     Err(anyhow::anyhow!("Currency could not be determined"))
 }
 
-// static NAME_VALIDATOR_REGEX: Lazy<Regex> =
-//     Lazy::new(|| Regex::new(r"^(?!\s+$)[^\s\p{Cc}]+(?:\s+[^\s\p{Cc}]+)*$").unwrap());
+static UPI_ID_VALIDATOR_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[a-zA-Z0-9.\-_]{2,49}@[a-zA-Z._]{2,49}$").unwrap());
 
 pub struct NameValidator {
     field_name: &'static str,
@@ -83,6 +83,52 @@ impl DateTimeValidator {
 impl CustomValidator<String> for DateTimeValidator {
     fn check(&self, value: &String) -> Result<(), InputValueError<String>> {
         if chrono::DateTime::parse_from_rfc3339(value).is_ok() {
+            Ok(())
+        } else {
+            Err(InputValueError::custom(format!(
+                "Invalid {}",
+                self.field_name
+            )))
+        }
+    }
+}
+
+pub struct IdValidator {
+    field_name: &'static str,
+}
+
+impl IdValidator {
+    pub fn new(name: &'static str) -> Self {
+        Self { field_name: name }
+    }
+}
+
+impl CustomValidator<String> for IdValidator {
+    fn check(&self, value: &String) -> Result<(), InputValueError<String>> {
+        if uuid::Uuid::parse_str(value).is_ok() {
+            Ok(())
+        } else {
+            Err(InputValueError::custom(format!(
+                "Invalid {}",
+                self.field_name
+            )))
+        }
+    }
+}
+
+pub struct UpiIdValidator {
+    field_name: &'static str,
+}
+
+impl UpiIdValidator {
+    pub fn new(name: &'static str) -> Self {
+        Self { field_name: name }
+    }
+}
+
+impl CustomValidator<String> for UpiIdValidator {
+    fn check(&self, value: &String) -> Result<(), InputValueError<String>> {
+        if UPI_ID_VALIDATOR_REGEX.is_match(value) {
             Ok(())
         } else {
             Err(InputValueError::custom(format!(
