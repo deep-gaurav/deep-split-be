@@ -1,4 +1,4 @@
-<p align="center"><a href="https://github.com/deep-gaurav/bingo"><img src="https://billdivide.app/icon_filled.webp" width="150"></a></p> 
+<p align="center"><a href="https://billdivide.app"><img src="https://billdivide.app/icon_filled.webp" width="150"></a></p> 
 <h2 align="center"><b>BillDivide</b></h2>
 <h4 align="center">The Simplest Way to Split Bills with Friends and Family</h4>
 <p align="center"><a href="https://play.google.com/store/apps/details?id=app.billdivide&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1"><img height=70 src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Play Store">
