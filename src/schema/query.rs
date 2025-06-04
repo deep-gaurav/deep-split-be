@@ -1,5 +1,6 @@
 use async_graphql::{Context, Object, SimpleObject, Union};
 
+use chrono::{DateTime, Utc};
 use sqlx::SqlitePool;
 
 use crate::{
@@ -795,6 +796,13 @@ impl Query {
             .as_authorized_user()
             .ok_or_else(|| anyhow::anyhow!("Unauthorized"))?;
         let pool = get_pool_from_context(context).await?;
+
+        // Parse from_time into RFC 3339 format (UTC)
+        let parsed_from_time = DateTime::parse_from_rfc3339(&from_time)
+            .map_err(|e| anyhow::anyhow!("Invalid from_time format: {}. Expected RFC 3339.", e))?
+            .with_timezone(&Utc)
+            .to_rfc3339();
+
         let data = sqlx::query!(r"
             SELECT SUM(total_spent) AS total_final_spent, category, currency_id FROM (
              SELECT  CASE WHEN e.created_by=$1 THEN e.amount ELSE 0 END +SUM(CASE WHEN st.to_user = $1 THEN -st.amount
@@ -805,7 +813,7 @@ impl Query {
              WHERE (e.group_id = $2 OR $2 IS NULL) AND (e.created_by = $1 OR st.from_user = $1) AND (e.created_at >= $3)
              GROUP BY e.id
             ) GROUP BY category, currency_id
-        ",user.id, group_id, from_time).fetch_all(pool).await?;
+        ",user.id, group_id, parsed_from_time).fetch_all(pool).await?;
         let mut categorised_amount = Vec::new();
         for rec in data {
             categorised_amount.push(CategorisedAmount {
