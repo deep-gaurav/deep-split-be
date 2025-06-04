@@ -810,7 +810,7 @@ impl Query {
                        END) AS total_spent, e.id, e.category AS category, e.currency_id AS currency_id
              FROM expenses AS e
              LEFT JOIN split_transactions AS st ON st.expense_id = e.id
-             WHERE (e.group_id = $2 OR $2 IS NULL) AND (e.created_by = $1 OR st.from_user = $1) AND (e.created_at >= $3)
+             WHERE (e.group_id = $2 OR $2 IS NULL) AND (e.created_by = $1 OR st.from_user = $1) AND (e.transaction_at >= $3)
              GROUP BY e.id
             ) GROUP BY category, currency_id
         ",user.id, group_id, parsed_from_time).fetch_all(pool).await?;
